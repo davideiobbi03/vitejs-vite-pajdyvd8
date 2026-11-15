@@ -34,6 +34,8 @@ import {
   ArrowUpDown,
   Palette,
   Image as ImageIcon,
+  Eraser,
+  SkipForward,
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://qwxfjrunqhssoonapfcl.supabase.co';
@@ -94,11 +96,21 @@ const PRESET_BACKGROUNDS = [
 ];
 
 const INITIAL_BACKGROUND = {
-  type: 'default', // 'default' | 'preset' | 'color' | 'image'
+  type: 'default',
   presetId: 'aurora-emerald',
   color: '#0b132b',
   imageUrl: '',
   overlayOpacity: 0.55,
+};
+
+const EMPTY_WEEKLY_PLAN = {
+  Lun: { Colazione: [], Pranzo: [], Cena: [], Spuntini: [] },
+  Mar: { Colazione: [], Pranzo: [], Cena: [], Spuntini: [] },
+  Mer: { Colazione: [], Pranzo: [], Cena: [], Spuntini: [] },
+  Gio: { Colazione: [], Pranzo: [], Cena: [], Spuntini: [] },
+  Ven: { Colazione: [], Pranzo: [], Cena: [], Spuntini: [] },
+  Sab: { Colazione: [], Pranzo: [], Cena: [], Spuntini: [] },
+  Dom: { Colazione: [], Pranzo: [], Cena: [], Spuntini: [] },
 };
 
 const INITIAL_FOODS = [
@@ -244,6 +256,7 @@ function normalizeData(raw) {
     workouts: Array.isArray(safe.workouts) && safe.workouts.length > 0 ? safe.workouts : INITIAL_WORKOUTS,
     targets: safe.targets && typeof safe.targets === 'object' ? { ...INITIAL_TARGETS, ...safe.targets } : INITIAL_TARGETS,
     theme: safe.theme === 'light' ? 'light' : 'dark',
+    betweenExerciseRest: typeof safe.betweenExerciseRest === 'number' ? safe.betweenExerciseRest : 180,
     background: {
       type: ['default', 'preset', 'color', 'image'].includes(bg.type) ? bg.type : INITIAL_BACKGROUND.type,
       presetId: typeof bg.presetId === 'string' ? bg.presetId : INITIAL_BACKGROUND.presetId,
@@ -316,7 +329,6 @@ export default function App() {
     }));
   };
 
-  // Ridimensiona e ottimizza foto caricata per sync veloce su Supabase
   const handleBackgroundImageUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -473,6 +485,7 @@ export default function App() {
   const [timerInitial, setTimerInitial] = useState(90);
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerFinishedAlert, setTimerFinishedAlert] = useState(false);
+  const [timerType, setTimerType] = useState('set'); // 'set' | 'exercise'
 
   useEffect(() => {
     if (!timerRunning) return;
@@ -490,8 +503,9 @@ export default function App() {
     return () => clearInterval(interval);
   }, [timerRunning, soundEnabled]);
 
-  const startTimer = (seconds) => {
+  const startTimer = (seconds, type = 'set') => {
     setTimerFinishedAlert(false);
+    setTimerType(type);
     setTimerInitial(seconds);
     setTimerSeconds(seconds);
     setTimerRunning(true);
@@ -682,9 +696,23 @@ export default function App() {
   const toggleSetCompleted = (exercise, setIndex) => {
     const key = `${exercise.id}-${setIndex}`;
     const nextState = !completedSets[key];
-    setCompletedSets((prev) => ({ ...prev, [key]: nextState }));
+    const nextCompleted = { ...completedSets, [key]: nextState };
+    setCompletedSets(nextCompleted);
+
     if (nextState && autoStartTimer) {
-      startTimer(exercise.rest || 90);
+      // Controlla se tutte le serie di questo esercizio sono ora completate
+      let allDone = true;
+      for (let i = 0; i < exercise.sets; i++) {
+        if (!nextCompleted[`${exercise.id}-${i}`]) {
+          allDone = false;
+          break;
+        }
+      }
+      if (allDone) {
+        startTimer(data.betweenExerciseRest || 180, 'exercise');
+      } else {
+        startTimer(exercise.rest || 90, 'set');
+      }
     }
   };
 
@@ -735,6 +763,76 @@ export default function App() {
     }));
   };
 
+  // --- FUNZIONI DI RESET A ZERO PER OGNI PAGINA ---
+  const handleResetDashboardPage = () => {
+    if (!window.confirm(`Vuoi azzerare a 0 i pasti di ${FULL_DAYS[selectedDay]} e le spunte delle serie?`)) return;
+    setData((prev) => ({
+      ...prev,
+      weeklyPlan: {
+        ...prev.weeklyPlan,
+        [selectedDay]: { Colazione: [], Pranzo: [], Cena: [], Spuntini: [] },
+      },
+    }));
+    setCompletedSets({});
+    setTimerRunning(false);
+    setTimerFinishedAlert(false);
+    setTimerSeconds(0);
+  };
+
+  const handleResetNutritionSubPage = () => {
+    if (nutritionSubTab === 'planner') {
+      if (!window.confirm('Vuoi azzerare a 0 tutti i pasti pianificati dell’intera settimana?')) return;
+      setData((prev) => ({
+        ...prev,
+        weeklyPlan: JSON.parse(JSON.stringify(EMPTY_WEEKLY_PLAN)),
+      }));
+    } else if (nutritionSubTab === 'composer') {
+      if (!window.confirm('Vuoi eliminare tutti i pasti composti salvati (portandoli a 0)?')) return;
+      setData((prev) => ({
+        ...prev,
+        meals: [],
+        weeklyPlan: JSON.parse(JSON.stringify(EMPTY_WEEKLY_PLAN)),
+      }));
+      setMealName('');
+      setMealItems([]);
+    } else if (nutritionSubTab === 'foods') {
+      if (!window.confirm('Vuoi azzerare a 0 tutto il database alimenti?')) return;
+      setData((prev) => ({
+        ...prev,
+        foods: [],
+      }));
+      setNewFood({ name: '', kcal: '', p: '', c: '', g: '' });
+    } else if (nutritionSubTab === 'weight') {
+      if (!window.confirm('Vuoi cancellare tutte le pesate registrate e portare lo storico a 0?')) return;
+      setData((prev) => ({
+        ...prev,
+        weights: [],
+      }));
+      setNewWeight('');
+      setNewWeightNote('');
+    }
+  };
+
+  const handleResetWorkoutPage = () => {
+    if (!currentWorkout) return;
+    if (!window.confirm(`Vuoi azzerare a 0 spunte, carichi (kg) e timer per "${currentWorkout.dayLabel}"?`)) return;
+    setCompletedSets({});
+    setTimerRunning(false);
+    setTimerFinishedAlert(false);
+    setTimerSeconds(0);
+    setData((prev) => ({
+      ...prev,
+      workouts: prev.workouts.map((wo) =>
+        wo.id === activeWorkoutId
+          ? {
+              ...wo,
+              exercises: wo.exercises.map((ex) => ({ ...ex, weight: 0 })),
+            }
+          : wo
+      ),
+    }));
+  };
+
   const handleExportJSON = () => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -773,6 +871,7 @@ export default function App() {
         theme: prev.theme,
         background: prev.background,
         layout: INITIAL_LAYOUT,
+        betweenExerciseRest: 180,
       })
     );
     setCompletedSets({});
@@ -809,7 +908,6 @@ export default function App() {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // --- CALCOLO STILE SFONDO PERSONALIZZATO ---
   const getWrapperBackgroundStyle = () => {
     const bg = data.background || INITIAL_BACKGROUND;
     if (bg.type === 'preset') {
@@ -834,7 +932,6 @@ export default function App() {
 
   const hasCustomBg = data.background?.type && data.background.type !== 'default';
 
-  // Classi dinamiche Tema Chiaro / Scuro con supporto trasparenza su sfondi personalizzati
   const cCard = isLight
     ? hasCustomBg
       ? 'bg-white/88 backdrop-blur-md border-slate-200/90 shadow-sm'
@@ -1004,22 +1101,33 @@ export default function App() {
           </h2>
           <p className={`text-xs ${cTextSecondary}`}>Visualizza macro e stato workout per il giorno selezionato</p>
         </div>
-        <div className={`flex gap-1 ${cInner} p-1 rounded-xl border overflow-x-auto`}>
-          {DAYS.map((d) => (
-            <button
-              key={d}
-              onClick={() => setSelectedDay(d)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                selectedDay === d
-                  ? 'bg-emerald-500 text-white shadow-sm'
-                  : isLight
-                  ? 'text-slate-600 hover:text-slate-950'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              {d}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className={`flex gap-1 ${cInner} p-1 rounded-xl border overflow-x-auto`}>
+            {DAYS.map((d) => (
+              <button
+                key={d}
+                onClick={() => setSelectedDay(d)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                  selectedDay === d
+                    ? 'bg-emerald-500 text-white shadow-sm'
+                    : isLight
+                    ? 'text-slate-600 hover:text-slate-950'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={handleResetDashboardPage}
+            title={`Azzera a 0 i pasti di ${FULL_DAYS[selectedDay]} e le serie completate`}
+            className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-500 font-semibold transition"
+          >
+            <Eraser className="w-3.5 h-3.5" />
+            <span>Azzera a 0</span>
+          </button>
         </div>
       </div>
     ),
@@ -1473,45 +1581,49 @@ export default function App() {
       'Pasti Già Pronti',
       <div className={`${cCard} border rounded-2xl p-5 space-y-3`}>
         <h3 className={`font-semibold text-base ${cTextPrimary}`}>Pasti Già Pronti ({data.meals.length})</h3>
-        <div className="space-y-2.5 max-h-[520px] overflow-y-auto pr-1">
-          {data.meals.map((meal) => {
-            const m = getMealMacros(meal);
-            return (
-              <div key={meal.id} className={`${cInner} border rounded-xl p-3.5 space-y-2`}>
-                <div className="flex items-start justify-between">
-                  <h4 className={`font-semibold text-sm ${cTextPrimary}`}>{meal.name}</h4>
-                  <button
-                    onClick={() =>
-                      setData((prev) => ({
-                        ...prev,
-                        meals: prev.meals.filter((x) => x.id !== meal.id),
-                      }))
-                    }
-                    className="text-slate-400 hover:text-rose-500"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+        {data.meals.length === 0 ? (
+          <p className={`text-xs ${cTextSecondary} italic py-6 text-center`}>Nessun pasto composto salvato.</p>
+        ) : (
+          <div className="space-y-2.5 max-h-[520px] overflow-y-auto pr-1">
+            {data.meals.map((meal) => {
+              const m = getMealMacros(meal);
+              return (
+                <div key={meal.id} className={`${cInner} border rounded-xl p-3.5 space-y-2`}>
+                  <div className="flex items-start justify-between">
+                    <h4 className={`font-semibold text-sm ${cTextPrimary}`}>{meal.name}</h4>
+                    <button
+                      onClick={() =>
+                        setData((prev) => ({
+                          ...prev,
+                          meals: prev.meals.filter((x) => x.id !== meal.id),
+                        }))
+                      }
+                      className="text-slate-400 hover:text-rose-500"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className={`text-xs ${cTextSecondary} space-y-0.5`}>
+                    {meal.items.map((it, i) => {
+                      const f = getFoodById(it.foodId);
+                      return f ? (
+                        <div key={i}>
+                          • {it.qty}x {f.name}
+                        </div>
+                      ) : null;
+                    })}
+                  </div>
+                  <div className={`pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-800/80'} flex gap-3 text-xs font-semibold`}>
+                    <span className="text-emerald-500">{Math.round(m.kcal)} kcal</span>
+                    <span className="text-sky-500">{Math.round(m.p)}g P</span>
+                    <span className="text-amber-500">{Math.round(m.c)}g C</span>
+                    <span className="text-rose-500">{Math.round(m.g)}g G</span>
+                  </div>
                 </div>
-                <div className={`text-xs ${cTextSecondary} space-y-0.5`}>
-                  {meal.items.map((it, i) => {
-                    const f = getFoodById(it.foodId);
-                    return f ? (
-                      <div key={i}>
-                        • {it.qty}x {f.name}
-                      </div>
-                    ) : null;
-                  })}
-                </div>
-                <div className={`pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-800/80'} flex gap-3 text-xs font-semibold`}>
-                  <span className="text-emerald-500">{Math.round(m.kcal)} kcal</span>
-                  <span className="text-sky-500">{Math.round(m.p)}g P</span>
-                  <span className="text-amber-500">{Math.round(m.c)}g C</span>
-                  <span className="text-rose-500">{Math.round(m.g)}g G</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     ),
   };
@@ -1600,27 +1712,31 @@ export default function App() {
       'Alimenti Salvati',
       <div className={`${cCard} border rounded-2xl p-5`}>
         <h3 className={`font-semibold text-base ${cTextPrimary} mb-3`}>Alimenti Salvati ({data.foods.length})</h3>
-        <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-          {data.foods.map((food) => (
-            <div
-              key={food.id}
-              className={`${cInner} border rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-2`}
-            >
-              <div>
-                <div className={`font-medium text-sm ${cTextPrimary}`}>{food.name}</div>
-                <div className={`text-xs ${cTextSecondary} flex gap-3 mt-0.5`}>
-                  <span className="text-emerald-500 font-semibold">{food.kcal} kcal</span>
-                  <span>P: {food.p}g</span>
-                  <span>C: {food.c}g</span>
-                  <span>G: {food.g}g</span>
+        {data.foods.length === 0 ? (
+          <p className={`text-xs ${cTextSecondary} italic py-6 text-center`}>Nessun alimento salvato nel database.</p>
+        ) : (
+          <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+            {data.foods.map((food) => (
+              <div
+                key={food.id}
+                className={`${cInner} border rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-2`}
+              >
+                <div>
+                  <div className={`font-medium text-sm ${cTextPrimary}`}>{food.name}</div>
+                  <div className={`text-xs ${cTextSecondary} flex gap-3 mt-0.5`}>
+                    <span className="text-emerald-500 font-semibold">{food.kcal} kcal</span>
+                    <span>P: {food.p}g</span>
+                    <span>C: {food.c}g</span>
+                    <span>G: {food.g}g</span>
+                  </div>
                 </div>
+                <button onClick={() => handleDeleteFood(food.id)} className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg">
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
-              <button onClick={() => handleDeleteFood(food.id)} className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     ),
   };
@@ -1713,23 +1829,27 @@ export default function App() {
 
         <div className={`space-y-2 pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-800'}`}>
           <h4 className={`text-xs font-semibold uppercase tracking-wider ${cTextSecondary}`}>Storico Registrazioni</h4>
-          {[...sortedWeights].reverse().map((w) => (
-            <div
-              key={w.id}
-              className={`${cInner} border rounded-xl px-3.5 py-2.5 flex items-center justify-between`}
-            >
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <span className={`font-bold text-sm ${cTextPrimary}`}>{w.weight} kg</span>
-                  <span className={`text-xs ${cTextSecondary}`}>{w.date}</span>
+          {sortedWeights.length === 0 ? (
+            <p className={`text-xs ${cTextSecondary} italic py-3 text-center`}>Nessuna pesata registrata.</p>
+          ) : (
+            [...sortedWeights].reverse().map((w) => (
+              <div
+                key={w.id}
+                className={`${cInner} border rounded-xl px-3.5 py-2.5 flex items-center justify-between`}
+              >
+                <div>
+                  <div className="flex items-center gap-2.5">
+                    <span className={`font-bold text-sm ${cTextPrimary}`}>{w.weight} kg</span>
+                    <span className={`text-xs ${cTextSecondary}`}>{w.date}</span>
+                  </div>
+                  {w.note && <p className={`text-xs ${cTextSecondary} mt-0.5`}>{w.note}</p>}
                 </div>
-                {w.note && <p className={`text-xs ${cTextSecondary} mt-0.5`}>{w.note}</p>}
+                <button onClick={() => handleDeleteWeight(w.id)} className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg">
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
-              <button onClick={() => handleDeleteWeight(w.id)} className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     ),
@@ -1759,7 +1879,7 @@ export default function App() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setWorkoutMode(workoutMode === 'live' ? 'edit' : 'live')}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition ${
@@ -1770,6 +1890,15 @@ export default function App() {
             >
               <Edit3 className="w-3.5 h-3.5" />
               {workoutMode === 'edit' ? 'Torna a Workout Live' : 'Modifica Scheda'}
+            </button>
+
+            <button
+              onClick={handleResetWorkoutPage}
+              title="Azzera a 0 spunte, carichi (kg) e timer di questa scheda"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-500 transition"
+            >
+              <Eraser className="w-3.5 h-3.5" />
+              <span>Azzera a 0</span>
             </button>
           </div>
         </div>
@@ -1783,7 +1912,25 @@ export default function App() {
               <p className={`text-xs ${cTextSecondary}`}>{currentWorkout.focus}</p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Selettore durata pausa tra esercizi */}
+              <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl ${cInner} border text-xs`}>
+                <SkipForward className="w-3.5 h-3.5 text-amber-500" />
+                <span className={cTextSecondary}>Pausa cambio es.:</span>
+                <select
+                  value={data.betweenExerciseRest || 180}
+                  onChange={(e) =>
+                    setData((prev) => ({ ...prev, betweenExerciseRest: Number(e.target.value) }))
+                  }
+                  className="bg-transparent font-bold text-amber-500 focus:outline-none cursor-pointer"
+                >
+                  <option value={120}>2m (120s)</option>
+                  <option value={150}>2m30 (150s)</option>
+                  <option value={180}>3m (180s)</option>
+                  <option value={240}>4m (240s)</option>
+                </select>
+              </div>
+
               <div className="text-right">
                 <div className={`text-xs ${cTextSecondary}`}>Serie Completate</div>
                 <div className="text-sm font-bold text-indigo-500">
@@ -1829,7 +1976,10 @@ export default function App() {
                       <strong className={cTextPrimary}>{ex.reps}</strong> rip
                     </span>
                     <span className="flex items-center gap-1 text-indigo-500">
-                      <Clock className="w-3.5 h-3.5" /> Recupero: {ex.rest}s
+                      <Clock className="w-3.5 h-3.5" /> Serie: {ex.rest}s
+                    </span>
+                    <span className="flex items-center gap-1 text-amber-500">
+                      <SkipForward className="w-3.5 h-3.5" /> Cambio es.: {data.betweenExerciseRest || 180}s
                     </span>
                   </div>
                   {ex.notes && <p className={`text-xs ${cTextSecondary} italic mt-1`}>Nota: {ex.notes}</p>}
@@ -1892,10 +2042,19 @@ export default function App() {
                   })}
 
                   <button
-                    onClick={() => startTimer(ex.rest || 90)}
+                    onClick={() => startTimer(ex.rest || 90, 'set')}
+                    title="Avvia pausa tra una serie e l'altra"
                     className="py-3 px-3 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-500 text-xs font-semibold flex items-center gap-1"
                   >
                     <Clock className="w-3.5 h-3.5" /> {ex.rest}s
+                  </button>
+
+                  <button
+                    onClick={() => startTimer(data.betweenExerciseRest || 180, 'exercise')}
+                    title="Avvia pausa di transizione al prossimo esercizio"
+                    className="py-3 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-500 text-xs font-semibold flex items-center gap-1"
+                  >
+                    <SkipForward className="w-3.5 h-3.5" /> Cambio Es.
                   </button>
                 </div>
               )}
@@ -1981,7 +2140,7 @@ export default function App() {
   return (
     <div
       style={getWrapperBackgroundStyle()}
-      className={`min-h-screen font-sans selection:bg-emerald-500/30 pb-28 transition-colors duration-200 ${
+      className={`min-h-screen font-sans selection:bg-emerald-500/30 pb-32 transition-colors duration-200 ${
         !hasCustomBg ? (isLight ? 'bg-slate-100' : 'bg-slate-950') : ''
       } ${isLight ? 'text-slate-900' : 'text-slate-100'}`}
     >
@@ -2187,7 +2346,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* 1. Predefinito & Gradienti */}
             <div className="space-y-2">
               <div className={`text-xs font-semibold ${cTextSecondary}`}>Sfondi Sfumati &amp; Predefinito</div>
               <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5">
@@ -2232,9 +2390,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* 2. Colore Tinta Unita + Immagine Personalizzata */}
             <div className={`grid grid-cols-1 md:grid-cols-12 gap-4 pt-3 border-t ${isLight ? 'border-slate-200' : 'border-slate-800'}`}>
-              {/* Colore Solido */}
               <div className="md:col-span-4 space-y-2">
                 <div className={`text-xs font-semibold ${cTextSecondary}`}>Colore Tinta Unita</div>
                 <div className="flex items-center gap-2">
@@ -2258,7 +2414,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Immagine / Foto Personalizzata */}
               <div className="md:col-span-8 space-y-2">
                 <div className={`text-xs font-semibold ${cTextSecondary}`}>Foto o Immagine Personalizzata</div>
                 <div className="flex flex-wrap sm:flex-nowrap gap-2">
@@ -2394,16 +2549,27 @@ export default function App() {
                         })}
                       </div>
 
-                      <button
-                        onClick={() => {
-                          setTempTargets(data.targets);
-                          setEditingTargets(true);
-                        }}
-                        className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl ${cInner} border ${cTextPrimary} transition`}
-                      >
-                        <Settings className="w-3.5 h-3.5 text-emerald-500" />
-                        Target Macro
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setTempTargets(data.targets);
+                            setEditingTargets(true);
+                          }}
+                          className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl ${cInner} border ${cTextPrimary} transition`}
+                        >
+                          <Settings className="w-3.5 h-3.5 text-emerald-500" />
+                          Target Macro
+                        </button>
+
+                        <button
+                          onClick={handleResetNutritionSubPage}
+                          title="Azzera a 0 tutti i dati di questa sezione"
+                          className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-500 font-semibold transition"
+                        >
+                          <Eraser className="w-3.5 h-3.5" />
+                          <span>Azzera a 0</span>
+                        </button>
+                      </div>
                     </div>
 
                     {editingTargets && (
@@ -2494,36 +2660,51 @@ export default function App() {
         )}
       </main>
 
-      {/* BARRA FLOATING TIMER */}
+      {/* BARRA FLOATING TIMER (SERIE + CAMBIO ESERCIZIO) */}
       <div
         className={`fixed bottom-0 inset-x-0 z-40 backdrop-blur-lg border-t shadow-2xl transition-colors ${
           isLight
-            ? 'bg-white/92 border-slate-200'
-            : 'bg-slate-900/92 border-slate-800'
+            ? 'bg-white/94 border-slate-200'
+            : 'bg-slate-900/94 border-slate-800'
         }`}
       >
         <div className="max-w-5xl mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
-            <div
-              className={`px-3.5 py-1.5 rounded-xl font-mono text-xl font-bold border transition ${
-                timerFinishedAlert
-                  ? 'bg-emerald-500 text-white border-emerald-400 animate-pulse'
-                  : timerRunning
-                  ? 'bg-indigo-600/20 text-indigo-500 border-indigo-500/50'
-                  : `${cInner} ${cTextPrimary}`
-              }`}
-            >
-              {formatSeconds(timerSeconds)}
+          <div className="flex items-center gap-2.5">
+            <div className="flex flex-col items-start">
+              <div
+                className={`px-3 py-1 rounded-xl font-mono text-xl font-bold border transition leading-tight ${
+                  timerFinishedAlert
+                    ? 'bg-emerald-500 text-white border-emerald-400 animate-pulse'
+                    : timerRunning
+                    ? timerType === 'exercise'
+                      ? 'bg-amber-500/20 text-amber-500 border-amber-500/50'
+                      : 'bg-indigo-600/20 text-indigo-500 border-indigo-500/50'
+                    : `${cInner} ${cTextPrimary}`
+                }`}
+              >
+                {formatSeconds(timerSeconds)}
+              </div>
+              <span
+                className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 px-1 ${
+                  timerType === 'exercise' ? 'text-amber-500' : 'text-indigo-500'
+                }`}
+              >
+                {timerType === 'exercise' ? 'Cambio Esercizio' : 'Tra Serie'}
+              </span>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               <button
                 onClick={() => {
                   setTimerFinishedAlert(false);
                   if (timerSeconds === 0) setTimerSeconds(timerInitial);
                   setTimerRunning(!timerRunning);
                 }}
-                className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition"
+                className={`p-2.5 rounded-xl text-white transition ${
+                  timerType === 'exercise'
+                    ? 'bg-amber-600 hover:bg-amber-500'
+                    : 'bg-indigo-600 hover:bg-indigo-500'
+                }`}
               >
                 {timerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
               </button>
@@ -2552,37 +2733,72 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            {[60, 90, 120].map((sec) => (
-              <button
-                key={sec}
-                onClick={() => startTimer(sec)}
-                className={`px-2.5 py-1.5 rounded-lg ${cInner} border text-xs font-semibold ${cTextPrimary}`}
-              >
-                {sec}s
-              </button>
-            ))}
-            <button
-              onClick={() => adjustTimer(-15)}
-              className={`px-2 py-1.5 rounded-lg ${cInner} border text-xs ${cTextSecondary}`}
-            >
-              -15s
-            </button>
-            <button
-              onClick={() => adjustTimer(15)}
-              className={`px-2 py-1.5 rounded-lg ${cInner} border text-xs ${cTextSecondary}`}
-            >
-              +15s
-            </button>
+          <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto">
+            {/* Preset Pausa tra Serie */}
+            <div className="flex items-center gap-1">
+              <span className={`hidden sm:inline text-[10px] uppercase font-bold ${cTextSecondary} mr-0.5`}>
+                Serie:
+              </span>
+              {[60, 90, 120].map((sec) => (
+                <button
+                  key={sec}
+                  onClick={() => startTimer(sec, 'set')}
+                  className={`px-2 py-1.5 rounded-lg border text-xs font-semibold transition ${
+                    timerType === 'set' && timerInitial === sec
+                      ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-500'
+                      : `${cInner} ${cTextPrimary}`
+                  }`}
+                >
+                  {sec}s
+                </button>
+              ))}
+            </div>
 
-            <label className={`hidden md:flex items-center gap-1.5 ml-2 text-xs ${cTextSecondary} cursor-pointer select-none`}>
+            <div className={`h-5 w-px mx-0.5 ${isLight ? 'bg-slate-300' : 'bg-slate-800'}`} />
+
+            {/* Preset Pausa tra Esercizi */}
+            <div className="flex items-center gap-1">
+              <span className="hidden sm:inline text-[10px] uppercase font-bold text-amber-500 mr-0.5">
+                Es.:
+              </span>
+              {[150, 180, 240].map((sec) => (
+                <button
+                  key={sec}
+                  onClick={() => startTimer(sec, 'exercise')}
+                  className={`px-2 py-1.5 rounded-lg border text-xs font-semibold transition ${
+                    timerType === 'exercise' && timerInitial === sec
+                      ? 'bg-amber-500/20 border-amber-500/50 text-amber-500'
+                      : `${cInner} text-amber-500`
+                  }`}
+                >
+                  {sec === 150 ? '2m30' : `${sec / 60}m`}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1 ml-0.5">
+              <button
+                onClick={() => adjustTimer(-15)}
+                className={`px-2 py-1.5 rounded-lg ${cInner} border text-xs ${cTextSecondary}`}
+              >
+                -15s
+              </button>
+              <button
+                onClick={() => adjustTimer(15)}
+                className={`px-2 py-1.5 rounded-lg ${cInner} border text-xs ${cTextSecondary}`}
+              >
+                +15s
+              </button>
+            </div>
+
+            <label className={`hidden lg:flex items-center gap-1.5 ml-1.5 text-xs ${cTextSecondary} cursor-pointer select-none`}>
               <input
                 type="checkbox"
                 checked={autoStartTimer}
                 onChange={(e) => setAutoStartTimer(e.target.checked)}
                 className="rounded accent-indigo-500"
               />
-              Auto-avvio su serie
+              Auto-avvio
             </label>
           </div>
         </div>
