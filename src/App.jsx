@@ -36,6 +36,7 @@ import {
   Image as ImageIcon,
   Eraser,
   SkipForward,
+  Check,
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://qwxfjrunqhssoonapfcl.supabase.co';
@@ -481,11 +482,17 @@ export default function App() {
   const [autoStartTimer, setAutoStartTimer] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
+  // Stato per modifica rapida titolo scheda
+  const [isEditingWorkoutTitle, setIsEditingWorkoutTitle] = useState(false);
+  const [tempWorkoutDayLabel, setTempWorkoutDayLabel] = useState('');
+  const [tempWorkoutTitle, setTempWorkoutTitle] = useState('');
+  const [tempWorkoutFocus, setTempWorkoutFocus] = useState('');
+
   const [timerSeconds, setTimerSeconds] = useState(90);
   const [timerInitial, setTimerInitial] = useState(90);
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerFinishedAlert, setTimerFinishedAlert] = useState(false);
-  const [timerType, setTimerType] = useState('set'); // 'set' | 'exercise'
+  const [timerType, setTimerType] = useState('set');
 
   useEffect(() => {
     if (!timerRunning) return;
@@ -700,7 +707,6 @@ export default function App() {
     setCompletedSets(nextCompleted);
 
     if (nextState && autoStartTimer) {
-      // Controlla se tutte le serie di questo esercizio sono ora completate
       let allDone = true;
       for (let i = 0; i < exercise.sets; i++) {
         if (!nextCompleted[`${exercise.id}-${i}`]) {
@@ -714,6 +720,34 @@ export default function App() {
         startTimer(exercise.rest || 90, 'set');
       }
     }
+  };
+
+  const updateWorkoutMetadata = (workoutId, patch) => {
+    setData((prev) => ({
+      ...prev,
+      workouts: prev.workouts.map((wo) =>
+        wo.id === workoutId ? { ...wo, ...patch } : wo
+      ),
+    }));
+  };
+
+  const startInlineTitleEdit = () => {
+    if (!currentWorkout) return;
+    setTempWorkoutDayLabel(currentWorkout.dayLabel);
+    setTempWorkoutTitle(currentWorkout.title);
+    setTempWorkoutFocus(currentWorkout.focus);
+    setIsEditingWorkoutTitle(true);
+  };
+
+  const saveInlineTitleEdit = (e) => {
+    if (e) e.preventDefault();
+    if (!currentWorkout) return;
+    updateWorkoutMetadata(currentWorkout.id, {
+      dayLabel: tempWorkoutDayLabel.trim() || currentWorkout.dayLabel,
+      title: tempWorkoutTitle.trim() || currentWorkout.title,
+      focus: tempWorkoutFocus.trim(),
+    });
+    setIsEditingWorkoutTitle(false);
   };
 
   const updateExerciseWeight = (workoutId, exerciseId, delta) => {
@@ -1281,6 +1315,7 @@ export default function App() {
                 onClick={() => {
                   setActiveWorkoutId(wo.id);
                   setWorkoutMode('live');
+                  setIsEditingWorkoutTitle(false);
                   setActiveTab('workout');
                 }}
                 className="mt-4 w-full py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition"
@@ -1867,7 +1902,10 @@ export default function App() {
             {data.workouts.map((wo) => (
               <button
                 key={wo.id}
-                onClick={() => setActiveWorkoutId(wo.id)}
+                onClick={() => {
+                  setActiveWorkoutId(wo.id);
+                  setIsEditingWorkoutTitle(false);
+                }}
                 className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition border ${
                   activeWorkoutId === wo.id
                     ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/20'
@@ -1881,7 +1919,10 @@ export default function App() {
 
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => setWorkoutMode(workoutMode === 'live' ? 'edit' : 'live')}
+              onClick={() => {
+                setIsEditingWorkoutTitle(false);
+                setWorkoutMode(workoutMode === 'live' ? 'edit' : 'live');
+              }}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition ${
                 workoutMode === 'edit'
                   ? 'bg-amber-500/20 border-amber-500/50 text-amber-500'
@@ -1904,48 +1945,152 @@ export default function App() {
         </div>
 
         {currentWorkout && (
-          <div className={`pt-3 border-t ${isLight ? 'border-slate-200' : 'border-slate-800/80'} flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
-            <div>
-              <h2 className={`text-lg font-bold ${cTextPrimary}`}>
-                {currentWorkout.dayLabel} — {currentWorkout.title}
-              </h2>
-              <p className={`text-xs ${cTextSecondary}`}>{currentWorkout.focus}</p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Selettore durata pausa tra esercizi */}
-              <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl ${cInner} border text-xs`}>
-                <SkipForward className="w-3.5 h-3.5 text-amber-500" />
-                <span className={cTextSecondary}>Pausa cambio es.:</span>
-                <select
-                  value={data.betweenExerciseRest || 180}
-                  onChange={(e) =>
-                    setData((prev) => ({ ...prev, betweenExerciseRest: Number(e.target.value) }))
-                  }
-                  className="bg-transparent font-bold text-amber-500 focus:outline-none cursor-pointer"
-                >
-                  <option value={120}>2m (120s)</option>
-                  <option value={150}>2m30 (150s)</option>
-                  <option value={180}>3m (180s)</option>
-                  <option value={240}>4m (240s)</option>
-                </select>
-              </div>
-
-              <div className="text-right">
-                <div className={`text-xs ${cTextSecondary}`}>Serie Completate</div>
-                <div className="text-sm font-bold text-indigo-500">
-                  {completedSetsInWorkout} / {totalSetsInWorkout}
+          <div className={`pt-3 border-t ${isLight ? 'border-slate-200' : 'border-slate-800/80'} space-y-3`}>
+            {/* Se siamo in modalità Edit Scheda, mostra subito i campi modificabili */}
+            {workoutMode === 'edit' ? (
+              <div className={`${cInner} border border-indigo-500/30 rounded-xl p-3.5 space-y-2.5`}>
+                <div className="text-xs font-semibold text-indigo-500 flex items-center gap-1.5">
+                  <Edit3 className="w-3.5 h-3.5" />
+                  Modifica Nome e Dettagli della Scheda
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                  <div className="sm:col-span-3">
+                    <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Etichetta Giorno</label>
+                    <input
+                      type="text"
+                      value={currentWorkout.dayLabel}
+                      onChange={(e) => updateWorkoutMetadata(currentWorkout.id, { dayLabel: e.target.value })}
+                      placeholder="Es. Giorno A"
+                      className={`w-full ${cInput} border rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-indigo-500`}
+                    />
+                  </div>
+                  <div className="sm:col-span-4">
+                    <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Nome Scheda</label>
+                    <input
+                      type="text"
+                      value={currentWorkout.title}
+                      onChange={(e) => updateWorkoutMetadata(currentWorkout.id, { title: e.target.value })}
+                      placeholder="Es. Upper Push"
+                      className={`w-full ${cInput} border rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-indigo-500`}
+                    />
+                  </div>
+                  <div className="sm:col-span-5">
+                    <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Focus Muscolare / Note</label>
+                    <input
+                      type="text"
+                      value={currentWorkout.focus}
+                      onChange={(e) => updateWorkoutMetadata(currentWorkout.id, { focus: e.target.value })}
+                      placeholder="Es. Petto, Spalle, Tricipiti"
+                      className={`w-full ${cInput} border rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500`}
+                    />
+                  </div>
                 </div>
               </div>
-              {completedSetsInWorkout > 0 && (
-                <button
-                  onClick={() => setCompletedSets({})}
-                  className={`text-xs px-2.5 py-1.5 rounded-lg ${cInner} border ${cTextSecondary}`}
-                >
-                  Azzera Spunte
-                </button>
-              )}
-            </div>
+            ) : isEditingWorkoutTitle ? (
+              /* Modifica rapida inline in modalità Live */
+              <form
+                onSubmit={saveInlineTitleEdit}
+                className={`${cInner} border border-indigo-500/40 rounded-xl p-3 space-y-2.5`}
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                  <input
+                    type="text"
+                    value={tempWorkoutDayLabel}
+                    onChange={(e) => setTempWorkoutDayLabel(e.target.value)}
+                    placeholder="Giorno A"
+                    className={`sm:col-span-3 ${cInput} border rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-indigo-500`}
+                  />
+                  <input
+                    type="text"
+                    autoFocus
+                    value={tempWorkoutTitle}
+                    onChange={(e) => setTempWorkoutTitle(e.target.value)}
+                    placeholder="Nome della scheda"
+                    className={`sm:col-span-4 ${cInput} border rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-indigo-500`}
+                  />
+                  <input
+                    type="text"
+                    value={tempWorkoutFocus}
+                    onChange={(e) => setTempWorkoutFocus(e.target.value)}
+                    placeholder="Focus muscolare (opzionale)"
+                    className={`sm:col-span-5 ${cInput} border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-indigo-500`}
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingWorkoutTitle(false)}
+                    className={`px-3 py-1 rounded-lg text-xs border ${cInner} ${cTextSecondary}`}
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3 py-1 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1"
+                  >
+                    <Check className="w-3.5 h-3.5" /> Salva Nome
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* Visualizzazione standard del titolo con pulsante matita rapido */
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="group">
+                  <div className="flex items-center gap-2">
+                    <h2
+                      onClick={startInlineTitleEdit}
+                      title="Clicca per rinominare la scheda"
+                      className={`text-lg font-bold ${cTextPrimary} cursor-pointer hover:text-indigo-500 transition`}
+                    >
+                      {currentWorkout.dayLabel} — {currentWorkout.title}
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={startInlineTitleEdit}
+                      title="Rinomina scheda"
+                      className={`p-1.5 rounded-lg border transition ${cInner} ${cTextSecondary} hover:text-indigo-500 hover:border-indigo-500/40`}
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <p className={`text-xs ${cTextSecondary}`}>{currentWorkout.focus}</p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl ${cInner} border text-xs`}>
+                    <SkipForward className="w-3.5 h-3.5 text-amber-500" />
+                    <span className={cTextSecondary}>Pausa cambio es.:</span>
+                    <select
+                      value={data.betweenExerciseRest || 180}
+                      onChange={(e) =>
+                        setData((prev) => ({ ...prev, betweenExerciseRest: Number(e.target.value) }))
+                      }
+                      className="bg-transparent font-bold text-amber-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value={120}>2m (120s)</option>
+                      <option value={150}>2m30 (150s)</option>
+                      <option value={180}>3m (180s)</option>
+                      <option value={240}>4m (240s)</option>
+                    </select>
+                  </div>
+
+                  <div className="text-right">
+                    <div className={`text-xs ${cTextSecondary}`}>Serie Completate</div>
+                    <div className="text-sm font-bold text-indigo-500">
+                      {completedSetsInWorkout} / {totalSetsInWorkout}
+                    </div>
+                  </div>
+                  {completedSetsInWorkout > 0 && (
+                    <button
+                      onClick={() => setCompletedSets({})}
+                      className={`text-xs px-2.5 py-1.5 rounded-lg ${cInner} border ${cTextSecondary}`}
+                    >
+                      Azzera Spunte
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2168,7 +2313,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Personalizza Sfondo */}
             <button
               onClick={() => {
                 setCustomImageInput(
@@ -2191,7 +2335,6 @@ export default function App() {
               <span className="hidden md:inline">Sfondo</span>
             </button>
 
-            {/* Switch Tema Chiaro / Scuro */}
             <button
               onClick={toggleTheme}
               title={isLight ? 'Passa a modalità scura' : 'Passa a modalità chiara'}
@@ -2209,7 +2352,6 @@ export default function App() {
               <span className="hidden lg:inline font-medium">{isLight ? 'Scura' : 'Chiara'}</span>
             </button>
 
-            {/* Modalità Riordina Sezioni */}
             <button
               onClick={() => setReorderMode((v) => !v)}
               title="Sposta e riordina le sezioni di ogni pagina"
@@ -2225,7 +2367,6 @@ export default function App() {
               <span className="hidden sm:inline">{reorderMode ? 'Fine Ordine' : 'Ordina'}</span>
             </button>
 
-            {/* Cloud Sync */}
             <button
               onClick={pullFromCloud}
               title={
@@ -2734,7 +2875,6 @@ export default function App() {
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto">
-            {/* Preset Pausa tra Serie */}
             <div className="flex items-center gap-1">
               <span className={`hidden sm:inline text-[10px] uppercase font-bold ${cTextSecondary} mr-0.5`}>
                 Serie:
@@ -2756,7 +2896,6 @@ export default function App() {
 
             <div className={`h-5 w-px mx-0.5 ${isLight ? 'bg-slate-300' : 'bg-slate-800'}`} />
 
-            {/* Preset Pausa tra Esercizi */}
             <div className="flex items-center gap-1">
               <span className="hidden sm:inline text-[10px] uppercase font-bold text-amber-500 mr-0.5">
                 Es.:
