@@ -234,7 +234,7 @@ const INITIAL_TARGETS = {
 };
 
 const INITIAL_LAYOUT = {
-  dashboard: ['daySelector', 'nutritionCard', 'weightCard', 'workoutsCard'],
+  dashboard: ['daySelector', 'topCardsRow', 'workoutsCard'],
   nutrition: ['subNav', 'mainContent'],
   planner: ['summaryCard', 'mealSlotsGrid'],
   composer: ['composerForm', 'savedMealsList'],
@@ -249,6 +249,14 @@ function normalizeData(raw) {
   const safe = raw && typeof raw === 'object' ? raw : {};
   const layout = safe.layout && typeof safe.layout === 'object' ? safe.layout : {};
   const bg = safe.background && typeof safe.background === 'object' ? safe.background : {};
+
+  let dashLayout = Array.isArray(layout.dashboard) ? layout.dashboard : INITIAL_LAYOUT.dashboard;
+  if (dashLayout.includes('nutritionCard') || dashLayout.includes('weightCard')) {
+    dashLayout = dashLayout
+      .map((item) => (item === 'nutritionCard' ? 'topCardsRow' : item))
+      .filter((item) => item !== 'weightCard');
+  }
+
   return {
     foods: Array.isArray(safe.foods) ? safe.foods : INITIAL_FOODS,
     meals: Array.isArray(safe.meals) ? safe.meals : INITIAL_MEALS,
@@ -266,7 +274,7 @@ function normalizeData(raw) {
       overlayOpacity: typeof bg.overlayOpacity === 'number' ? bg.overlayOpacity : INITIAL_BACKGROUND.overlayOpacity,
     },
     layout: {
-      dashboard: Array.isArray(layout.dashboard) ? layout.dashboard : INITIAL_LAYOUT.dashboard,
+      dashboard: dashLayout,
       nutrition: Array.isArray(layout.nutrition) ? layout.nutrition : INITIAL_LAYOUT.nutrition,
       planner: Array.isArray(layout.planner) ? layout.planner : INITIAL_LAYOUT.planner,
       composer: Array.isArray(layout.composer) ? layout.composer : INITIAL_LAYOUT.composer,
@@ -982,9 +990,10 @@ export default function App() {
     ? 'bg-slate-950/75 border-slate-800/90'
     : 'bg-slate-950/90 border-slate-800';
 
+  // text-base su mobile evita lo zoom automatico di Safari su iPhone/iPad
   const cInput = isLight
-    ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400'
-    : 'bg-slate-950 border-slate-800 text-white placeholder:text-slate-500';
+    ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 text-base sm:text-sm'
+    : 'bg-slate-950 border-slate-800 text-white placeholder:text-slate-500 text-base sm:text-sm';
   const cTextPrimary = isLight ? 'text-slate-900' : 'text-slate-100';
   const cTextSecondary = isLight ? 'text-slate-500' : 'text-slate-400';
 
@@ -1023,7 +1032,7 @@ export default function App() {
                 disabled={isFirst}
                 onClick={() => moveSection(groupKey, sectionId, -1)}
                 title="Sposta su / prima"
-                className={`p-1 rounded-lg border transition disabled:opacity-30 ${
+                className={`p-1.5 rounded-lg border transition disabled:opacity-30 ${
                   isLight
                     ? 'bg-white border-amber-300 hover:bg-amber-200 text-amber-900'
                     : 'bg-slate-950 border-slate-700 hover:bg-slate-800 text-white'
@@ -1036,7 +1045,7 @@ export default function App() {
                 disabled={isLast}
                 onClick={() => moveSection(groupKey, sectionId, 1)}
                 title="Sposta giù / dopo"
-                className={`p-1 rounded-lg border transition disabled:opacity-30 ${
+                className={`p-1.5 rounded-lg border transition disabled:opacity-30 ${
                   isLight
                     ? 'bg-white border-amber-300 hover:bg-amber-200 text-amber-900'
                     : 'bg-slate-950 border-slate-700 hover:bg-slate-800 text-white'
@@ -1056,7 +1065,7 @@ export default function App() {
     if (sortedWeights.length < 2) {
       return (
         <div
-          className={`h-32 flex items-center justify-center text-sm border border-dashed rounded-xl ${
+          className={`h-32 flex items-center justify-center text-center px-4 text-xs sm:text-sm border border-dashed rounded-xl ${
             isLight ? 'text-slate-400 border-slate-300' : 'text-slate-500 border-slate-800'
           }`}
         >
@@ -1127,21 +1136,32 @@ export default function App() {
       'dashboard',
       'daySelector',
       'Selettore Giorno',
-      <div className={`${cCard} border rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
-        <div>
-          <h2 className="text-base font-semibold flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-emerald-500" />
-            Riepilogo Giornaliero
-          </h2>
-          <p className={`text-xs ${cTextSecondary}`}>Visualizza macro e stato workout per il giorno selezionato</p>
+      <div className={`${cCard} border rounded-2xl p-3.5 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm sm:text-base font-semibold flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-emerald-500" />
+              Riepilogo Giornaliero
+            </h2>
+            <p className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Visualizza macro e stato workout</p>
+          </div>
+          <button
+            onClick={handleResetDashboardPage}
+            title={`Azzera a 0 i pasti di ${FULL_DAYS[selectedDay]} e le serie completate`}
+            className="sm:hidden flex items-center gap-1 text-xs px-2.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-500 font-semibold transition"
+          >
+            <Eraser className="w-3.5 h-3.5" />
+            <span>Azzera</span>
+          </button>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className={`flex gap-1 ${cInner} p-1 rounded-xl border overflow-x-auto`}>
+
+        <div className="flex items-center gap-2">
+          <div className={`flex-1 sm:flex-none grid grid-cols-7 gap-1 ${cInner} p-1 rounded-xl border`}>
             {DAYS.map((d) => (
               <button
                 key={d}
                 onClick={() => setSelectedDay(d)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                className={`py-2 sm:px-3 sm:py-1.5 rounded-lg text-xs font-semibold text-center transition ${
                   selectedDay === d
                     ? 'bg-emerald-500 text-white shadow-sm'
                     : isLight
@@ -1157,7 +1177,7 @@ export default function App() {
           <button
             onClick={handleResetDashboardPage}
             title={`Azzera a 0 i pasti di ${FULL_DAYS[selectedDay]} e le serie completate`}
-            className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-500 font-semibold transition"
+            className="hidden sm:flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-500 font-semibold transition whitespace-nowrap"
           >
             <Eraser className="w-3.5 h-3.5" />
             <span>Azzera a 0</span>
@@ -1166,114 +1186,120 @@ export default function App() {
       </div>
     ),
 
-    nutritionCard: renderReorderWrapper(
+    topCardsRow: renderReorderWrapper(
       'dashboard',
-      'nutritionCard',
-      'Card Alimentazione',
-      <div className={`${cCard} border rounded-2xl p-5 flex flex-col justify-between`}>
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-              <Utensils className="w-5 h-5 text-emerald-500" />
-            </div>
-            <div>
-              <h3 className={`font-semibold ${cTextPrimary}`}>Alimentazione — {FULL_DAYS[selectedDay]}</h3>
-              <p className={`text-xs ${cTextSecondary}`}>Bilancio energetico e macronutrienti</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setActiveTab('nutrition')}
-            className="text-xs text-emerald-500 hover:text-emerald-400 flex items-center gap-1 font-medium"
-          >
-            Apri Piano <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div className={`${cInner} border rounded-xl p-4 mb-4`}>
-          <div className="flex justify-between items-baseline mb-2">
-            <span className={`text-xs uppercase tracking-wider font-semibold ${cTextSecondary}`}>Calorie Pianificate</span>
-            <div className="text-right">
-              <span className={`text-2xl font-bold ${cTextPrimary}`}>{dayMacros.kcal}</span>
-              <span className={`text-xs ${cTextSecondary}`}> / {data.targets.kcal} kcal</span>
-            </div>
-          </div>
-          <div className={`w-full h-3 ${isLight ? 'bg-slate-200' : 'bg-slate-800'} rounded-full overflow-hidden`}>
-            <div
-              className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300"
-              style={{ width: `${Math.min(100, Math.round((dayMacros.kcal / (data.targets.kcal || 1)) * 100))}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Proteine', val: dayMacros.p, target: data.targets.p, color: 'bg-sky-500' },
-            { label: 'Carboidrati', val: dayMacros.c, target: data.targets.c, color: 'bg-amber-500' },
-            { label: 'Grassi', val: dayMacros.g, target: data.targets.g, color: 'bg-rose-500' },
-          ].map((m) => {
-            const pct = Math.min(100, Math.round((m.val / (m.target || 1)) * 100));
-            return (
-              <div key={m.label} className={`${cInner} border rounded-xl p-3`}>
-                <div className={`text-xs ${cTextSecondary} mb-1`}>{m.label}</div>
-                <div className={`font-bold text-base ${cTextPrimary}`}>
-                  {m.val}g <span className={`text-xs font-normal ${cTextSecondary}`}>/ {m.target}g</span>
-                </div>
-                <div className={`w-full h-1.5 ${isLight ? 'bg-slate-200' : 'bg-slate-800'} rounded-full mt-2 overflow-hidden`}>
-                  <div className={`h-full ${m.color} rounded-full`} style={{ width: `${pct}%` }} />
-                </div>
+      'topCardsRow',
+      'Riepilogo Alimentazione & Peso',
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+        {/* Card Alimentazione */}
+        <div className={`${cCard} border rounded-2xl p-4 sm:p-5 flex flex-col justify-between`}>
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shrink-0">
+                <Utensils className="w-5 h-5 text-emerald-500" />
               </div>
-            );
-          })}
-        </div>
-      </div>
-    ),
-
-    weightCard: renderReorderWrapper(
-      'dashboard',
-      'weightCard',
-      'Card Peso Corporeo',
-      <div className={`${cCard} border rounded-2xl p-5 flex flex-col justify-between`}>
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-              <Scale className="w-5 h-5 text-emerald-500" />
+              <div>
+                <h3 className={`font-semibold text-sm sm:text-base ${cTextPrimary}`}>
+                  Alimentazione — {FULL_DAYS[selectedDay]}
+                </h3>
+                <p className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Bilancio energetico e macro</p>
+              </div>
             </div>
-            <div>
-              <h3 className={`font-semibold ${cTextPrimary}`}>Peso Corporeo</h3>
-              <p className={`text-xs ${cTextSecondary}`}>Check-in settimanale</p>
-            </div>
+            <button
+              onClick={() => setActiveTab('nutrition')}
+              className="text-xs text-emerald-500 hover:text-emerald-400 flex items-center gap-0.5 font-semibold shrink-0 py-1"
+            >
+              Piano <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
-          <button
-            onClick={() => {
-              setActiveTab('nutrition');
-              setNutritionSubTab('weight');
-            }}
-            className="text-xs text-emerald-500 hover:text-emerald-400 flex items-center gap-1 font-medium"
-          >
-            Dettagli <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
 
-        {latestWeight ? (
-          <div className="flex items-baseline gap-3 mb-3">
-            <span className={`text-3xl font-bold ${cTextPrimary}`}>{latestWeight.weight} kg</span>
-            {weightDeltaTotal !== null && (
-              <span
-                className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  Number(weightDeltaTotal) <= 0
-                    ? 'bg-emerald-500/15 text-emerald-500'
-                    : 'bg-amber-500/15 text-amber-500'
-                }`}
-              >
-                {Number(weightDeltaTotal) > 0 ? `+${weightDeltaTotal}` : weightDeltaTotal} kg tot
+          <div className={`${cInner} border rounded-xl p-3.5 sm:p-4 mb-3.5`}>
+            <div className="flex justify-between items-baseline mb-2">
+              <span className={`text-[11px] uppercase tracking-wider font-semibold ${cTextSecondary}`}>
+                Calorie Pianificate
               </span>
-            )}
+              <div className="text-right">
+                <span className={`text-xl sm:text-2xl font-bold ${cTextPrimary}`}>{dayMacros.kcal}</span>
+                <span className={`text-xs ${cTextSecondary}`}> / {data.targets.kcal} kcal</span>
+              </div>
+            </div>
+            <div className={`w-full h-2.5 sm:h-3 ${isLight ? 'bg-slate-200' : 'bg-slate-800'} rounded-full overflow-hidden`}>
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300"
+                style={{ width: `${Math.min(100, Math.round((dayMacros.kcal / (data.targets.kcal || 1)) * 100))}%` }}
+              />
+            </div>
           </div>
-        ) : (
-          <p className={`text-sm ${cTextSecondary} mb-3`}>Nessuna pesata registrata</p>
-        )}
 
-        {renderWeightChart(135)}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {[
+              { label: 'Proteine', short: 'Prot.', val: dayMacros.p, target: data.targets.p, color: 'bg-sky-500' },
+              { label: 'Carboidrati', short: 'Carbo', val: dayMacros.c, target: data.targets.c, color: 'bg-amber-500' },
+              { label: 'Grassi', short: 'Grassi', val: dayMacros.g, target: data.targets.g, color: 'bg-rose-500' },
+            ].map((m) => {
+              const pct = Math.min(100, Math.round((m.val / (m.target || 1)) * 100));
+              return (
+                <div key={m.label} className={`${cInner} border rounded-xl p-2.5 sm:p-3`}>
+                  <div className={`text-[11px] sm:text-xs ${cTextSecondary} mb-1`}>
+                    <span className="sm:hidden">{m.short}</span>
+                    <span className="hidden sm:inline">{m.label}</span>
+                  </div>
+                  <div className={`font-bold text-sm sm:text-base ${cTextPrimary}`}>
+                    {m.val}g <span className={`text-[11px] font-normal ${cTextSecondary}`}>/{m.target}</span>
+                  </div>
+                  <div className={`w-full h-1.5 ${isLight ? 'bg-slate-200' : 'bg-slate-800'} rounded-full mt-2 overflow-hidden`}>
+                    <div className={`h-full ${m.color} rounded-full`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Card Peso Corporeo */}
+        <div className={`${cCard} border rounded-2xl p-4 sm:p-5 flex flex-col justify-between`}>
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shrink-0">
+                <Scale className="w-5 h-5 text-emerald-500" />
+              </div>
+              <div>
+                <h3 className={`font-semibold text-sm sm:text-base ${cTextPrimary}`}>Peso Corporeo</h3>
+                <p className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Check-in settimanale</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setActiveTab('nutrition');
+                setNutritionSubTab('weight');
+              }}
+              className="text-xs text-emerald-500 hover:text-emerald-400 flex items-center gap-0.5 font-semibold shrink-0 py-1"
+            >
+              Dettagli <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {latestWeight ? (
+            <div className="flex items-baseline gap-3 mb-3">
+              <span className={`text-2xl sm:text-3xl font-bold ${cTextPrimary}`}>{latestWeight.weight} kg</span>
+              {weightDeltaTotal !== null && (
+                <span
+                  className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                    Number(weightDeltaTotal) <= 0
+                      ? 'bg-emerald-500/15 text-emerald-500'
+                      : 'bg-amber-500/15 text-amber-500'
+                  }`}
+                >
+                  {Number(weightDeltaTotal) > 0 ? `+${weightDeltaTotal}` : weightDeltaTotal} kg tot
+                </span>
+              )}
+            </div>
+          ) : (
+            <p className={`text-sm ${cTextSecondary} mb-3`}>Nessuna pesata registrata</p>
+          )}
+
+          {renderWeightChart(135)}
+        </div>
       </div>
     ),
 
@@ -1281,24 +1307,28 @@ export default function App() {
       'dashboard',
       'workoutsCard',
       'Schede Allenamento',
-      <div className={`${cCard} border rounded-2xl p-5`}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+      <div className={`${cCard} border rounded-2xl p-4 sm:p-5`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-500/15 border border-indigo-500/30">
+            <div className="p-2 rounded-xl bg-indigo-500/15 border border-indigo-500/30 shrink-0">
               <Dumbbell className="w-5 h-5 text-indigo-500" />
             </div>
             <div>
-              <h3 className={`font-semibold ${cTextPrimary}`}>Schede Allenamento (3x Settimana • Manubri + Corpo Libero)</h3>
-              <p className={`text-xs ${cTextSecondary}`}>Scegli la sessione di oggi per avviare il tracker serie e il timer di recupero</p>
+              <h3 className={`font-semibold text-sm sm:text-base ${cTextPrimary}`}>
+                Schede Allenamento (3x Settimana)
+              </h3>
+              <p className={`text-[11px] sm:text-xs ${cTextSecondary}`}>
+                Manubri + Corpo Libero • Tocca una sessione per iniziare
+              </p>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-3.5">
           {data.workouts.map((wo) => (
             <div
               key={wo.id}
-              className={`${cInner} border hover:border-indigo-500/50 rounded-xl p-4 flex flex-col justify-between transition`}
+              className={`${cInner} border hover:border-indigo-500/50 rounded-xl p-3.5 sm:p-4 flex flex-col justify-between transition`}
             >
               <div>
                 <div className="flex items-center justify-between mb-1.5">
@@ -1318,7 +1348,7 @@ export default function App() {
                   setIsEditingWorkoutTitle(false);
                   setActiveTab('workout');
                 }}
-                className="mt-4 w-full py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                className="mt-4 w-full py-3 sm:py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 transition"
               >
                 <Play className="w-3.5 h-3.5 fill-current" /> Inizia Workout
               </button>
@@ -1335,16 +1365,16 @@ export default function App() {
       'planner',
       'summaryCard',
       'Riepilogo Giorno & Copia',
-      <div className={`${cCard} border rounded-2xl p-4 space-y-4`}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
+      <div className={`${cCard} border rounded-2xl p-3.5 sm:p-4 space-y-4`}>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
             {DAYS.map((d) => {
               const m = getDayMacros(d);
               return (
                 <button
                   key={d}
                   onClick={() => setSelectedDay(d)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex flex-col items-center min-w-[58px] border transition ${
+                  className={`py-2 px-1 sm:px-3 rounded-xl text-xs font-semibold flex flex-col items-center border transition ${
                     selectedDay === d
                       ? 'bg-emerald-500/15 border-emerald-500 text-emerald-500'
                       : `${cInner} ${cTextSecondary}`
@@ -1357,12 +1387,12 @@ export default function App() {
             })}
           </div>
 
-          <div className={`flex items-center gap-2 ${cInner} p-1.5 rounded-xl border`}>
-            <span className={`text-xs ${cTextSecondary} pl-2`}>Copia su:</span>
+          <div className={`flex items-center justify-between sm:justify-start gap-2 ${cInner} p-2 rounded-xl border`}>
+            <span className={`text-xs ${cTextSecondary} pl-1`}>Copia su:</span>
             <select
               value={copyTargetDay}
               onChange={(e) => setCopyTargetDay(e.target.value)}
-              className={`${cInput} text-xs rounded-lg px-2 py-1.5 border focus:outline-none`}
+              className={`${cInput} text-xs rounded-lg px-2.5 py-1.5 border focus:outline-none`}
             >
               {DAYS.filter((d) => d !== selectedDay).map((d) => (
                 <option key={d} value={d}>
@@ -1372,35 +1402,35 @@ export default function App() {
             </select>
             <button
               onClick={handleCopyDayPlan}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-500 text-xs font-semibold transition"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-500 text-xs font-semibold transition"
             >
               <Copy className="w-3.5 h-3.5" /> Copia
             </button>
           </div>
         </div>
 
-        <div className={`grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-800/80'}`}>
+        <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-800/80'}`}>
           <div className={`${cInner} rounded-xl p-3 border`}>
-            <div className={`text-xs ${cTextSecondary}`}>Calorie Totali</div>
-            <div className="text-lg font-bold text-emerald-500">
+            <div className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Calorie Totali</div>
+            <div className="text-base sm:text-lg font-bold text-emerald-500">
               {dayMacros.kcal} <span className={`text-xs font-normal ${cTextSecondary}`}>/ {data.targets.kcal}</span>
             </div>
           </div>
           <div className={`${cInner} rounded-xl p-3 border`}>
-            <div className={`text-xs ${cTextSecondary}`}>Proteine</div>
-            <div className="text-lg font-bold text-sky-500">
+            <div className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Proteine</div>
+            <div className="text-base sm:text-lg font-bold text-sky-500">
               {dayMacros.p}g <span className={`text-xs font-normal ${cTextSecondary}`}>/ {data.targets.p}g</span>
             </div>
           </div>
           <div className={`${cInner} rounded-xl p-3 border`}>
-            <div className={`text-xs ${cTextSecondary}`}>Carboidrati</div>
-            <div className="text-lg font-bold text-amber-500">
+            <div className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Carboidrati</div>
+            <div className="text-base sm:text-lg font-bold text-amber-500">
               {dayMacros.c}g <span className={`text-xs font-normal ${cTextSecondary}`}>/ {data.targets.c}g</span>
             </div>
           </div>
           <div className={`${cInner} rounded-xl p-3 border`}>
-            <div className={`text-xs ${cTextSecondary}`}>Grassi</div>
-            <div className="text-lg font-bold text-rose-500">
+            <div className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Grassi</div>
+            <div className="text-base sm:text-lg font-bold text-rose-500">
               {dayMacros.g}g <span className={`text-xs font-normal ${cTextSecondary}`}>/ {data.targets.g}g</span>
             </div>
           </div>
@@ -1412,7 +1442,7 @@ export default function App() {
       'planner',
       'mealSlotsGrid',
       'Slot Pasti Giornalieri',
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
         {MEAL_SLOTS.map((slot) => {
           const assignedMealIds = data.weeklyPlan[selectedDay]?.[slot] || [];
           return (
@@ -1422,7 +1452,7 @@ export default function App() {
             >
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className={`font-semibold ${cTextPrimary}`}>{slot}</h4>
+                  <h4 className={`font-semibold text-sm sm:text-base ${cTextPrimary}`}>{slot}</h4>
                   <span className={`text-xs ${cTextSecondary}`}>
                     {assignedMealIds.length} {assignedMealIds.length === 1 ? 'pasto' : 'pasti'}
                   </span>
@@ -1454,7 +1484,7 @@ export default function App() {
                           </div>
                           <button
                             onClick={() => removeMealFromSlot(selectedDay, slot, idx)}
-                            className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg transition"
+                            className="p-2 text-slate-400 hover:text-rose-500 rounded-lg transition"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -1474,7 +1504,7 @@ export default function App() {
                       e.target.value = '';
                     }
                   }}
-                  className={`flex-1 ${cInput} border rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-emerald-500`}
+                  className={`flex-1 ${cInput} border rounded-xl px-3 py-2.5 sm:py-2 text-xs focus:outline-none focus:border-emerald-500`}
                 >
                   <option value="" disabled>
                     + Assegna un pasto composto...
@@ -1501,7 +1531,7 @@ export default function App() {
       'composer',
       'composerForm',
       'Crea Nuovo Pasto',
-      <div className={`${cCard} border rounded-2xl p-5 space-y-4`}>
+      <div className={`${cCard} border rounded-2xl p-4 sm:p-5 space-y-4`}>
         <h3 className="font-semibold text-base text-emerald-500">Componi un Nuovo Pasto Ricorrente</h3>
         <form onSubmit={handleSaveComposedMeal} className="space-y-4">
           <div>
@@ -1512,7 +1542,7 @@ export default function App() {
               placeholder="Es. Colazione Yogurt Greco & Muesli"
               value={mealName}
               onChange={(e) => setMealName(e.target.value)}
-              className={`w-full ${cInput} border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-emerald-500`}
+              className={`w-full ${cInput} border rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-emerald-500`}
             />
           </div>
 
@@ -1524,7 +1554,7 @@ export default function App() {
               <select
                 value={selectedFoodToAdd || (data.foods[0]?.id ?? '')}
                 onChange={(e) => setSelectedFoodToAdd(e.target.value)}
-                className={`flex-1 ${cInput} border rounded-xl px-3 py-2 text-xs focus:outline-none`}
+                className={`flex-1 ${cInput} border rounded-xl px-3 py-2.5 sm:py-2 focus:outline-none`}
               >
                 {data.foods.map((f) => (
                   <option key={f.id} value={f.id}>
@@ -1539,12 +1569,12 @@ export default function App() {
                   min="0.1"
                   value={selectedFoodQty}
                   onChange={(e) => setSelectedFoodQty(e.target.value)}
-                  className={`w-20 ${cInput} border rounded-xl px-2.5 py-2 text-xs text-center`}
+                  className={`w-24 sm:w-20 ${cInput} border rounded-xl px-2.5 py-2 text-center`}
                 />
                 <button
                   type="button"
                   onClick={handleAddIngredientToComposer}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-500 text-xs font-semibold flex items-center gap-1"
+                  className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-500 text-xs font-semibold flex items-center justify-center gap-1"
                 >
                   <Plus className="w-4 h-4" /> Aggiungi
                 </button>
@@ -1561,19 +1591,19 @@ export default function App() {
                 return (
                   <div
                     key={idx}
-                    className={`flex items-center justify-between ${cInner} px-3 py-2 rounded-xl border text-xs`}
+                    className={`flex items-center justify-between ${cInner} px-3 py-2.5 rounded-xl border text-xs`}
                   >
-                    <span>
+                    <span className="pr-2">
                       <strong className="text-emerald-500">{it.qty}x</strong> {food.name}
                     </span>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2.5 shrink-0">
                       <span className={cTextSecondary}>
                         {Math.round(food.kcal * it.qty)} kcal • {Math.round(food.p * it.qty)}g P
                       </span>
                       <button
                         type="button"
                         onClick={() => setMealItems((prev) => prev.filter((_, i) => i !== idx))}
-                        className="text-slate-400 hover:text-rose-500"
+                        className="p-1 text-slate-400 hover:text-rose-500"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -1602,7 +1632,7 @@ export default function App() {
           <button
             type="submit"
             disabled={!mealName.trim() || mealItems.length === 0}
-            className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white font-bold text-sm transition"
+            className="w-full py-3 sm:py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white font-bold text-sm transition"
           >
             Salva Pasto nel Ricettario
           </button>
@@ -1614,41 +1644,43 @@ export default function App() {
       'composer',
       'savedMealsList',
       'Pasti Già Pronti',
-      <div className={`${cCard} border rounded-2xl p-5 space-y-3`}>
+      <div className={`${cCard} border rounded-2xl p-4 sm:p-5 space-y-3`}>
         <h3 className={`font-semibold text-base ${cTextPrimary}`}>Pasti Già Pronti ({data.meals.length})</h3>
         {data.meals.length === 0 ? (
           <p className={`text-xs ${cTextSecondary} italic py-6 text-center`}>Nessun pasto composto salvato.</p>
         ) : (
-          <div className="space-y-2.5 max-h-[520px] overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[540px] overflow-y-auto pr-1">
             {data.meals.map((meal) => {
               const m = getMealMacros(meal);
               return (
-                <div key={meal.id} className={`${cInner} border rounded-xl p-3.5 space-y-2`}>
-                  <div className="flex items-start justify-between">
-                    <h4 className={`font-semibold text-sm ${cTextPrimary}`}>{meal.name}</h4>
-                    <button
-                      onClick={() =>
-                        setData((prev) => ({
-                          ...prev,
-                          meals: prev.meals.filter((x) => x.id !== meal.id),
-                        }))
-                      }
-                      className="text-slate-400 hover:text-rose-500"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                <div key={meal.id} className={`${cInner} border rounded-xl p-3.5 space-y-2 flex flex-col justify-between`}>
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className={`font-semibold text-sm ${cTextPrimary}`}>{meal.name}</h4>
+                      <button
+                        onClick={() =>
+                          setData((prev) => ({
+                            ...prev,
+                            meals: prev.meals.filter((x) => x.id !== meal.id),
+                          }))
+                        }
+                        className="p-1 text-slate-400 hover:text-rose-500"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className={`text-xs ${cTextSecondary} space-y-0.5 mt-1.5`}>
+                      {meal.items.map((it, i) => {
+                        const f = getFoodById(it.foodId);
+                        return f ? (
+                          <div key={i}>
+                            • {it.qty}x {f.name}
+                          </div>
+                        ) : null;
+                      })}
+                    </div>
                   </div>
-                  <div className={`text-xs ${cTextSecondary} space-y-0.5`}>
-                    {meal.items.map((it, i) => {
-                      const f = getFoodById(it.foodId);
-                      return f ? (
-                        <div key={i}>
-                          • {it.qty}x {f.name}
-                        </div>
-                      ) : null;
-                    })}
-                  </div>
-                  <div className={`pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-800/80'} flex gap-3 text-xs font-semibold`}>
+                  <div className={`pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-800/80'} flex flex-wrap gap-3 text-xs font-semibold`}>
                     <span className="text-emerald-500">{Math.round(m.kcal)} kcal</span>
                     <span className="text-sky-500">{Math.round(m.p)}g P</span>
                     <span className="text-amber-500">{Math.round(m.c)}g C</span>
@@ -1668,7 +1700,7 @@ export default function App() {
       'foods',
       'addFoodForm',
       'Aggiungi Alimento',
-      <div className={`${cCard} border rounded-2xl p-5 h-fit`}>
+      <div className={`${cCard} border rounded-2xl p-4 sm:p-5 h-fit`}>
         <h3 className="font-semibold text-base text-emerald-500 mb-3">Aggiungi Alimento al Database</h3>
         <form onSubmit={handleAddFood} className="space-y-3">
           <div>
@@ -1679,10 +1711,10 @@ export default function App() {
               placeholder="Es. Fiocchi di Latte (200g)"
               value={newFood.name}
               onChange={(e) => setNewFood({ ...newFood, name: e.target.value })}
-              className={`w-full ${cInput} border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500`}
+              className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2 focus:outline-none focus:border-emerald-500`}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
             <div>
               <label className={`block text-xs ${cTextSecondary} mb-1`}>Calorie (kcal)</label>
               <input
@@ -1691,7 +1723,7 @@ export default function App() {
                 placeholder="190"
                 value={newFood.kcal}
                 onChange={(e) => setNewFood({ ...newFood, kcal: e.target.value })}
-                className={`w-full ${cInput} border rounded-xl px-3 py-2 text-sm`}
+                className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
               />
             </div>
             <div>
@@ -1703,7 +1735,7 @@ export default function App() {
                 placeholder="24"
                 value={newFood.p}
                 onChange={(e) => setNewFood({ ...newFood, p: e.target.value })}
-                className={`w-full ${cInput} border rounded-xl px-3 py-2 text-sm`}
+                className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
               />
             </div>
             <div>
@@ -1715,7 +1747,7 @@ export default function App() {
                 placeholder="6"
                 value={newFood.c}
                 onChange={(e) => setNewFood({ ...newFood, c: e.target.value })}
-                className={`w-full ${cInput} border rounded-xl px-3 py-2 text-sm`}
+                className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
               />
             </div>
             <div>
@@ -1727,13 +1759,13 @@ export default function App() {
                 placeholder="8"
                 value={newFood.g}
                 onChange={(e) => setNewFood({ ...newFood, g: e.target.value })}
-                className={`w-full ${cInput} border rounded-xl px-3 py-2 text-sm`}
+                className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
               />
             </div>
           </div>
           <button
             type="submit"
-            className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm transition"
+            className="w-full py-3 sm:py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm transition"
           >
             Salva Alimento
           </button>
@@ -1745,12 +1777,12 @@ export default function App() {
       'foods',
       'foodsList',
       'Alimenti Salvati',
-      <div className={`${cCard} border rounded-2xl p-5`}>
+      <div className={`${cCard} border rounded-2xl p-4 sm:p-5`}>
         <h3 className={`font-semibold text-base ${cTextPrimary} mb-3`}>Alimenti Salvati ({data.foods.length})</h3>
         {data.foods.length === 0 ? (
           <p className={`text-xs ${cTextSecondary} italic py-6 text-center`}>Nessun alimento salvato nel database.</p>
         ) : (
-          <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-[500px] overflow-y-auto pr-1">
             {data.foods.map((food) => (
               <div
                 key={food.id}
@@ -1758,14 +1790,14 @@ export default function App() {
               >
                 <div>
                   <div className={`font-medium text-sm ${cTextPrimary}`}>{food.name}</div>
-                  <div className={`text-xs ${cTextSecondary} flex gap-3 mt-0.5`}>
+                  <div className={`text-xs ${cTextSecondary} flex flex-wrap gap-2.5 mt-0.5`}>
                     <span className="text-emerald-500 font-semibold">{food.kcal} kcal</span>
                     <span>P: {food.p}g</span>
                     <span>C: {food.c}g</span>
                     <span>G: {food.g}g</span>
                   </div>
                 </div>
-                <button onClick={() => handleDeleteFood(food.id)} className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg">
+                <button onClick={() => handleDeleteFood(food.id)} className="p-2 text-slate-400 hover:text-rose-500 rounded-lg">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -1781,12 +1813,12 @@ export default function App() {
       'weight',
       'addWeightForm',
       'Registra Pesata',
-      <div className={`${cCard} border rounded-2xl p-5 space-y-4 h-fit`}>
+      <div className={`${cCard} border rounded-2xl p-4 sm:p-5 space-y-4 h-fit`}>
         <h3 className="font-semibold text-base text-emerald-500 flex items-center gap-2">
           <Scale className="w-4 h-4" /> Registra Pesata Settimanale
         </h3>
         <form onSubmit={handleAddWeight} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
             <div>
               <label className={`block text-xs ${cTextSecondary} mb-1`}>Peso (kg)</label>
               <input
@@ -1796,7 +1828,7 @@ export default function App() {
                 placeholder="77.0"
                 value={newWeight}
                 onChange={(e) => setNewWeight(e.target.value)}
-                className={`w-full ${cInput} border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500`}
+                className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2 focus:outline-none focus:border-emerald-500`}
               />
             </div>
             <div>
@@ -1806,7 +1838,7 @@ export default function App() {
                 required
                 value={newWeightDate}
                 onChange={(e) => setNewWeightDate(e.target.value)}
-                className={`w-full ${cInput} border rounded-xl px-3 py-2 text-sm`}
+                className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
               />
             </div>
           </div>
@@ -1817,12 +1849,12 @@ export default function App() {
               placeholder="Es. Pesata mattutina a digiuno"
               value={newWeightNote}
               onChange={(e) => setNewWeightNote(e.target.value)}
-              className={`w-full ${cInput} border rounded-xl px-3 py-2 text-sm`}
+              className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
             />
           </div>
           <button
             type="submit"
-            className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm transition"
+            className="w-full py-3 sm:py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm transition"
           >
             Aggiungi Pesata
           </button>
@@ -1834,7 +1866,7 @@ export default function App() {
       'weight',
       'weightChartCard',
       'Grafico & Storico Peso',
-      <div className={`${cCard} border rounded-2xl p-5 space-y-5`}>
+      <div className={`${cCard} border rounded-2xl p-4 sm:p-5 space-y-5`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className={`font-semibold text-base ${cTextPrimary}`}>Andamento nel Tempo</h3>
@@ -1879,7 +1911,7 @@ export default function App() {
                   </div>
                   {w.note && <p className={`text-xs ${cTextSecondary} mt-0.5`}>{w.note}</p>}
                 </div>
-                <button onClick={() => handleDeleteWeight(w.id)} className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg">
+                <button onClick={() => handleDeleteWeight(w.id)} className="p-2 text-slate-400 hover:text-rose-500 rounded-lg">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -1896,9 +1928,10 @@ export default function App() {
       'workout',
       'workoutHeader',
       'Intestazione Scheda & Avanzamento',
-      <div className={`${cCard} border rounded-2xl p-4 space-y-4`}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
+      <div className={`${cCard} border rounded-2xl p-3.5 sm:p-4 space-y-3.5 sm:space-y-4`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          {/* Selettore schede scorrevole su mobile, affiancato su tablet/desktop */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1 sm:pb-0">
             {data.workouts.map((wo) => (
               <button
                 key={wo.id}
@@ -1906,7 +1939,7 @@ export default function App() {
                   setActiveWorkoutId(wo.id);
                   setIsEditingWorkoutTitle(false);
                 }}
-                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition border ${
+                className={`px-3.5 py-2.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition border ${
                   activeWorkoutId === wo.id
                     ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/20'
                     : `${cInner} ${cTextSecondary}`
@@ -1917,26 +1950,26 @@ export default function App() {
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => {
                 setIsEditingWorkoutTitle(false);
                 setWorkoutMode(workoutMode === 'live' ? 'edit' : 'live');
               }}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition ${
+              className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 sm:py-2 rounded-xl text-xs font-semibold border transition ${
                 workoutMode === 'edit'
                   ? 'bg-amber-500/20 border-amber-500/50 text-amber-500'
                   : `${cInner} ${cTextPrimary}`
               }`}
             >
               <Edit3 className="w-3.5 h-3.5" />
-              {workoutMode === 'edit' ? 'Torna a Workout Live' : 'Modifica Scheda'}
+              {workoutMode === 'edit' ? 'Workout Live' : 'Modifica Scheda'}
             </button>
 
             <button
               onClick={handleResetWorkoutPage}
               title="Azzera a 0 spunte, carichi (kg) e timer di questa scheda"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-500 transition"
+              className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-500 transition whitespace-nowrap"
             >
               <Eraser className="w-3.5 h-3.5" />
               <span>Azzera a 0</span>
@@ -1946,7 +1979,6 @@ export default function App() {
 
         {currentWorkout && (
           <div className={`pt-3 border-t ${isLight ? 'border-slate-200' : 'border-slate-800/80'} space-y-3`}>
-            {/* Se siamo in modalità Edit Scheda, mostra subito i campi modificabili */}
             {workoutMode === 'edit' ? (
               <div className={`${cInner} border border-indigo-500/30 rounded-xl p-3.5 space-y-2.5`}>
                 <div className="text-xs font-semibold text-indigo-500 flex items-center gap-1.5">
@@ -1961,7 +1993,7 @@ export default function App() {
                       value={currentWorkout.dayLabel}
                       onChange={(e) => updateWorkoutMetadata(currentWorkout.id, { dayLabel: e.target.value })}
                       placeholder="Es. Giorno A"
-                      className={`w-full ${cInput} border rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-indigo-500`}
+                      className={`w-full ${cInput} border rounded-xl px-3 py-2 font-semibold focus:outline-none focus:border-indigo-500`}
                     />
                   </div>
                   <div className="sm:col-span-4">
@@ -1971,7 +2003,7 @@ export default function App() {
                       value={currentWorkout.title}
                       onChange={(e) => updateWorkoutMetadata(currentWorkout.id, { title: e.target.value })}
                       placeholder="Es. Upper Push"
-                      className={`w-full ${cInput} border rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-indigo-500`}
+                      className={`w-full ${cInput} border rounded-xl px-3 py-2 font-semibold focus:outline-none focus:border-indigo-500`}
                     />
                   </div>
                   <div className="sm:col-span-5">
@@ -1981,13 +2013,12 @@ export default function App() {
                       value={currentWorkout.focus}
                       onChange={(e) => updateWorkoutMetadata(currentWorkout.id, { focus: e.target.value })}
                       placeholder="Es. Petto, Spalle, Tricipiti"
-                      className={`w-full ${cInput} border rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500`}
+                      className={`w-full ${cInput} border rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500`}
                     />
                   </div>
                 </div>
               </div>
             ) : isEditingWorkoutTitle ? (
-              /* Modifica rapida inline in modalità Live */
               <form
                 onSubmit={saveInlineTitleEdit}
                 className={`${cInner} border border-indigo-500/40 rounded-xl p-3 space-y-2.5`}
@@ -1998,7 +2029,7 @@ export default function App() {
                     value={tempWorkoutDayLabel}
                     onChange={(e) => setTempWorkoutDayLabel(e.target.value)}
                     placeholder="Giorno A"
-                    className={`sm:col-span-3 ${cInput} border rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-indigo-500`}
+                    className={`sm:col-span-3 ${cInput} border rounded-lg px-2.5 py-2 font-semibold focus:outline-none focus:border-indigo-500`}
                   />
                   <input
                     type="text"
@@ -2006,41 +2037,40 @@ export default function App() {
                     value={tempWorkoutTitle}
                     onChange={(e) => setTempWorkoutTitle(e.target.value)}
                     placeholder="Nome della scheda"
-                    className={`sm:col-span-4 ${cInput} border rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-indigo-500`}
+                    className={`sm:col-span-4 ${cInput} border rounded-lg px-2.5 py-2 font-semibold focus:outline-none focus:border-indigo-500`}
                   />
                   <input
                     type="text"
                     value={tempWorkoutFocus}
                     onChange={(e) => setTempWorkoutFocus(e.target.value)}
                     placeholder="Focus muscolare (opzionale)"
-                    className={`sm:col-span-5 ${cInput} border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-indigo-500`}
+                    className={`sm:col-span-5 ${cInput} border rounded-lg px-2.5 py-2 focus:outline-none focus:border-indigo-500`}
                   />
                 </div>
                 <div className="flex justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => setIsEditingWorkoutTitle(false)}
-                    className={`px-3 py-1 rounded-lg text-xs border ${cInner} ${cTextSecondary}`}
+                    className={`px-3.5 py-2 rounded-lg text-xs border ${cInner} ${cTextSecondary}`}
                   >
                     Annulla
                   </button>
                   <button
                     type="submit"
-                    className="px-3 py-1 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1"
+                    className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1"
                   >
                     <Check className="w-3.5 h-3.5" /> Salva Nome
                   </button>
                 </div>
               </form>
             ) : (
-              /* Visualizzazione standard del titolo con pulsante matita rapido */
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="group">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
                   <div className="flex items-center gap-2">
                     <h2
                       onClick={startInlineTitleEdit}
                       title="Clicca per rinominare la scheda"
-                      className={`text-lg font-bold ${cTextPrimary} cursor-pointer hover:text-indigo-500 transition`}
+                      className={`text-base sm:text-lg font-bold ${cTextPrimary} cursor-pointer hover:text-indigo-500 transition`}
                     >
                       {currentWorkout.dayLabel} — {currentWorkout.title}
                     </h2>
@@ -2048,7 +2078,7 @@ export default function App() {
                       type="button"
                       onClick={startInlineTitleEdit}
                       title="Rinomina scheda"
-                      className={`p-1.5 rounded-lg border transition ${cInner} ${cTextSecondary} hover:text-indigo-500 hover:border-indigo-500/40`}
+                      className={`p-1.5 rounded-lg border transition shrink-0 ${cInner} ${cTextSecondary} hover:text-indigo-500 hover:border-indigo-500/40`}
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
@@ -2056,10 +2086,10 @@ export default function App() {
                   <p className={`text-xs ${cTextSecondary}`}>{currentWorkout.focus}</p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center justify-between md:justify-end gap-2.5 sm:gap-3">
                   <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl ${cInner} border text-xs`}>
-                    <SkipForward className="w-3.5 h-3.5 text-amber-500" />
-                    <span className={cTextSecondary}>Pausa cambio es.:</span>
+                    <SkipForward className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span className={cTextSecondary}>Cambio es.:</span>
                     <select
                       value={data.betweenExerciseRest || 180}
                       onChange={(e) =>
@@ -2074,20 +2104,22 @@ export default function App() {
                     </select>
                   </div>
 
-                  <div className="text-right">
-                    <div className={`text-xs ${cTextSecondary}`}>Serie Completate</div>
-                    <div className="text-sm font-bold text-indigo-500">
-                      {completedSetsInWorkout} / {totalSetsInWorkout}
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <div className={`text-[11px] ${cTextSecondary}`}>Completate</div>
+                      <div className="text-xs sm:text-sm font-bold text-indigo-500">
+                        {completedSetsInWorkout} / {totalSetsInWorkout}
+                      </div>
                     </div>
+                    {completedSetsInWorkout > 0 && (
+                      <button
+                        onClick={() => setCompletedSets({})}
+                        className={`text-xs px-2.5 py-1.5 rounded-lg ${cInner} border ${cTextSecondary}`}
+                      >
+                        Reset
+                      </button>
+                    )}
                   </div>
-                  {completedSetsInWorkout > 0 && (
-                    <button
-                      onClick={() => setCompletedSets({})}
-                      className={`text-xs px-2.5 py-1.5 rounded-lg ${cInner} border ${cTextSecondary}`}
-                    >
-                      Azzera Spunte
-                    </button>
-                  )}
                 </div>
               </div>
             )}
@@ -2101,21 +2133,21 @@ export default function App() {
       'exercisesList',
       'Elenco Esercizi',
       currentWorkout ? (
-        <div className="space-y-3.5">
+        <div className="space-y-3 sm:space-y-3.5">
           {currentWorkout.exercises.map((ex, exIdx) => (
             <div
               key={ex.id}
               className={`${cCard} border rounded-2xl p-4 sm:p-5 space-y-3.5`}
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5 sm:gap-3">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-md">
+                  <div className="flex items-start gap-2">
+                    <span className="text-xs font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-md mt-0.5 shrink-0">
                       #{exIdx + 1}
                     </span>
-                    <h3 className={`font-semibold text-base ${cTextPrimary}`}>{ex.name}</h3>
+                    <h3 className={`font-semibold text-sm sm:text-base ${cTextPrimary} leading-snug`}>{ex.name}</h3>
                   </div>
-                  <div className={`flex flex-wrap items-center gap-3 text-xs ${cTextSecondary} mt-1.5`}>
+                  <div className={`flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs ${cTextSecondary} mt-1.5`}>
                     <span>
                       <strong className={cTextPrimary}>{ex.sets}</strong> serie ×{' '}
                       <strong className={cTextPrimary}>{ex.reps}</strong> rip
@@ -2130,27 +2162,28 @@ export default function App() {
                   {ex.notes && <p className={`text-xs ${cTextSecondary} italic mt-1`}>Nota: {ex.notes}</p>}
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* Controllo carico touch-friendly */}
+                <div className="flex items-center justify-between sm:justify-end gap-2 pt-1 sm:pt-0">
                   {ex.weight > 0 || workoutMode === 'edit' ? (
                     <div className={`flex items-center ${cInner} border rounded-xl p-1`}>
                       <button
                         onClick={() => updateExerciseWeight(currentWorkout.id, ex.id, -1)}
-                        className={`w-7 h-7 flex items-center justify-center ${cTextSecondary} font-bold`}
+                        className={`w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg active:bg-slate-500/10 ${cTextSecondary} font-bold text-base`}
                       >
                         -
                       </button>
-                      <span className={`px-2 text-xs font-bold ${cTextPrimary} min-w-[52px] text-center`}>
+                      <span className={`px-2.5 text-xs sm:text-sm font-bold ${cTextPrimary} min-w-[58px] text-center`}>
                         {ex.weight === 0 ? 'BW' : `${ex.weight} kg`}
                       </span>
                       <button
                         onClick={() => updateExerciseWeight(currentWorkout.id, ex.id, +1)}
-                        className={`w-7 h-7 flex items-center justify-center ${cTextSecondary} font-bold`}
+                        className={`w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg active:bg-slate-500/10 ${cTextSecondary} font-bold text-base`}
                       >
                         +
                       </button>
                     </div>
                   ) : (
-                    <span className={`text-xs font-semibold px-2.5 py-1.5 rounded-xl ${cInner} border ${cTextSecondary}`}>
+                    <span className={`text-xs font-semibold px-3 py-2 rounded-xl ${cInner} border ${cTextSecondary}`}>
                       Corpo Libero
                     </span>
                   )}
@@ -2158,7 +2191,7 @@ export default function App() {
                   {workoutMode === 'edit' && (
                     <button
                       onClick={() => handleDeleteExercise(ex.id)}
-                      className="p-2 rounded-xl bg-rose-500/10 text-rose-500 hover:bg-rose-500/20"
+                      className="p-2.5 rounded-xl bg-rose-500/10 text-rose-500 hover:bg-rose-500/20"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -2167,40 +2200,46 @@ export default function App() {
               </div>
 
               {workoutMode === 'live' && (
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  {Array.from({ length: ex.sets }).map((_, setIdx) => {
-                    const isDone = !!completedSets[`${ex.id}-${setIdx}`];
-                    return (
-                      <button
-                        key={setIdx}
-                        onClick={() => toggleSetCompleted(ex, setIdx)}
-                        className={`flex-1 min-w-[74px] py-3 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 border transition active:scale-95 ${
-                          isDone
-                            ? 'bg-emerald-500 border-emerald-400 text-white shadow-sm shadow-emerald-500/20'
-                            : `${cInner} ${cTextPrimary}`
-                        }`}
-                      >
-                        {isDone ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4 text-slate-400" />}
-                        Serie {setIdx + 1}
-                      </button>
-                    );
-                  })}
+                <div className="space-y-2 pt-1">
+                  {/* Griglia serie 2 colonne su mobile per tap facile col pollice, flex su desktop */}
+                  <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+                    {Array.from({ length: ex.sets }).map((_, setIdx) => {
+                      const isDone = !!completedSets[`${ex.id}-${setIdx}`];
+                      return (
+                        <button
+                          key={setIdx}
+                          onClick={() => toggleSetCompleted(ex, setIdx)}
+                          className={`sm:flex-1 sm:min-w-[82px] py-3.5 sm:py-3 px-3 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 border transition active:scale-95 ${
+                            isDone
+                              ? 'bg-emerald-500 border-emerald-400 text-white shadow-sm shadow-emerald-500/20'
+                              : `${cInner} ${cTextPrimary}`
+                          }`}
+                        >
+                          {isDone ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <Circle className="w-4 h-4 text-slate-400 shrink-0" />}
+                          Serie {setIdx + 1}
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                  <button
-                    onClick={() => startTimer(ex.rest || 90, 'set')}
-                    title="Avvia pausa tra una serie e l'altra"
-                    className="py-3 px-3 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-500 text-xs font-semibold flex items-center gap-1"
-                  >
-                    <Clock className="w-3.5 h-3.5" /> {ex.rest}s
-                  </button>
+                  {/* Pulsanti dedicati alle due pause (Serie vs Cambio Esercizio) */}
+                  <div className="grid grid-cols-2 sm:flex gap-2">
+                    <button
+                      onClick={() => startTimer(ex.rest || 90, 'set')}
+                      title="Avvia pausa tra una serie e l'altra"
+                      className="py-2.5 px-3 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-500 text-xs font-semibold flex items-center justify-center gap-1.5"
+                    >
+                      <Clock className="w-3.5 h-3.5" /> Pausa Serie ({ex.rest}s)
+                    </button>
 
-                  <button
-                    onClick={() => startTimer(data.betweenExerciseRest || 180, 'exercise')}
-                    title="Avvia pausa di transizione al prossimo esercizio"
-                    className="py-3 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-500 text-xs font-semibold flex items-center gap-1"
-                  >
-                    <SkipForward className="w-3.5 h-3.5" /> Cambio Es.
-                  </button>
+                    <button
+                      onClick={() => startTimer(data.betweenExerciseRest || 180, 'exercise')}
+                      title="Avvia pausa di transizione al prossimo esercizio"
+                      className="py-2.5 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-500 text-xs font-semibold flex items-center justify-center gap-1.5"
+                    >
+                      <SkipForward className="w-3.5 h-3.5" /> Cambio Esercizio
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -2209,7 +2248,7 @@ export default function App() {
           {workoutMode === 'edit' && (
             <form
               onSubmit={handleAddExercise}
-              className={`${cCard} border border-indigo-500/40 rounded-2xl p-5 space-y-3`}
+              className={`${cCard} border border-indigo-500/40 rounded-2xl p-4 sm:p-5 space-y-3`}
             >
               <h4 className="font-semibold text-sm text-indigo-500">+ Aggiungi Esercizio a {currentWorkout.dayLabel}</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2219,17 +2258,17 @@ export default function App() {
                   placeholder="Nome esercizio (es. Croci con Manubri)"
                   value={newExercise.name}
                   onChange={(e) => setNewExercise({ ...newExercise, name: e.target.value })}
-                  className={`${cInput} border rounded-xl px-3 py-2 text-sm`}
+                  className={`${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
                 />
                 <input
                   type="text"
                   placeholder="Note tecniche (opzionale)"
                   value={newExercise.notes}
                   onChange={(e) => setNewExercise({ ...newExercise, notes: e.target.value })}
-                  className={`${cInput} border rounded-xl px-3 py-2 text-sm`}
+                  className={`${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
                 />
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
                 <div>
                   <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Serie</label>
                   <input
@@ -2237,7 +2276,7 @@ export default function App() {
                     min="1"
                     value={newExercise.sets}
                     onChange={(e) => setNewExercise({ ...newExercise, sets: e.target.value })}
-                    className={`w-full ${cInput} border rounded-xl px-3 py-2 text-sm`}
+                    className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
                   />
                 </div>
                 <div>
@@ -2246,7 +2285,7 @@ export default function App() {
                     type="text"
                     value={newExercise.reps}
                     onChange={(e) => setNewExercise({ ...newExercise, reps: e.target.value })}
-                    className={`w-full ${cInput} border rounded-xl px-3 py-2 text-sm`}
+                    className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
                   />
                 </div>
                 <div>
@@ -2257,7 +2296,7 @@ export default function App() {
                     min="0"
                     value={newExercise.weight}
                     onChange={(e) => setNewExercise({ ...newExercise, weight: e.target.value })}
-                    className={`w-full ${cInput} border rounded-xl px-3 py-2 text-sm`}
+                    className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
                   />
                 </div>
                 <div>
@@ -2268,11 +2307,11 @@ export default function App() {
                     min="15"
                     value={newExercise.rest}
                     onChange={(e) => setNewExercise({ ...newExercise, rest: e.target.value })}
-                    className={`w-full ${cInput} border rounded-xl px-3 py-2 text-sm`}
+                    className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
                   />
                 </div>
               </div>
-              <button type="submit" className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">
+              <button type="submit" className="w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold">
                 Aggiungi Esercizio
               </button>
             </form>
@@ -2285,34 +2324,34 @@ export default function App() {
   return (
     <div
       style={getWrapperBackgroundStyle()}
-      className={`min-h-screen font-sans selection:bg-emerald-500/30 pb-32 transition-colors duration-200 ${
+      className={`min-h-screen font-sans selection:bg-emerald-500/30 pb-44 sm:pb-32 transition-colors duration-200 ${
         !hasCustomBg ? (isLight ? 'bg-slate-100' : 'bg-slate-950') : ''
       } ${isLight ? 'text-slate-900' : 'text-slate-100'}`}
     >
       {/* HEADER */}
       <header
-        className={`sticky top-0 z-30 backdrop-blur-md border-b transition-colors ${
+        className={`sticky top-0 z-30 backdrop-blur-md border-b transition-colors pt-[env(safe-area-inset-top)] ${
           isLight
-            ? 'bg-white/88 border-slate-200'
-            : 'bg-slate-950/88 border-slate-800/80'
+            ? 'bg-white/90 border-slate-200'
+            : 'bg-slate-950/90 border-slate-800/80'
         }`}
       >
-        <div className="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-emerald-500/10">
-              <Flame className="w-5 h-5 text-white" />
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-emerald-500/10 shrink-0">
+              <Flame className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
-            <div>
-              <h1 className="font-bold text-lg tracking-tight leading-none">
+            <div className="truncate">
+              <h1 className="font-bold text-base sm:text-lg tracking-tight leading-none">
                 FitTrack <span className="text-emerald-500">Pro</span>
               </h1>
-              <p className={`text-[11px] ${cTextSecondary} mt-0.5`}>
+              <p className={`hidden sm:block text-[11px] ${cTextSecondary} mt-0.5 truncate`}>
                 Dieta Settimanale • Peso • Manubri &amp; Corpo Libero
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             <button
               onClick={() => {
                 setCustomImageInput(
@@ -2323,7 +2362,7 @@ export default function App() {
                 setBgModalOpen((v) => !v);
               }}
               title="Personalizza sfondo"
-              className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition ${
+              className={`flex items-center justify-center gap-1.5 text-xs p-2 sm:px-2.5 sm:py-1.5 rounded-lg border transition ${
                 bgModalOpen || hasCustomBg
                   ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-500 font-semibold'
                   : isLight
@@ -2338,7 +2377,7 @@ export default function App() {
             <button
               onClick={toggleTheme}
               title={isLight ? 'Passa a modalità scura' : 'Passa a modalità chiara'}
-              className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition ${
+              className={`flex items-center justify-center gap-1.5 text-xs p-2 sm:px-2.5 sm:py-1.5 rounded-lg border transition ${
                 isLight
                   ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
                   : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
@@ -2354,8 +2393,8 @@ export default function App() {
 
             <button
               onClick={() => setReorderMode((v) => !v)}
-              title="Sposta e riordina le sezioni di ogni pagina"
-              className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition ${
+              title="Sposta e riordina le sezioni"
+              className={`flex items-center justify-center gap-1.5 text-xs p-2 sm:px-2.5 sm:py-1.5 rounded-lg border transition ${
                 reorderMode
                   ? 'bg-amber-500 border-amber-400 text-slate-950 font-semibold shadow-sm'
                   : isLight
@@ -2364,7 +2403,7 @@ export default function App() {
               }`}
             >
               <ArrowUpDown className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{reorderMode ? 'Fine Ordine' : 'Ordina'}</span>
+              <span className="hidden sm:inline">{reorderMode ? 'Fine' : 'Ordina'}</span>
             </button>
 
             <button
@@ -2376,9 +2415,9 @@ export default function App() {
                     }`
                   : syncStatus === 'syncing'
                   ? 'Sincronizzazione in corso...'
-                  : 'Errore di connessione cloud - clicca per riprovare'
+                  : 'Errore di connessione cloud'
               }
-              className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition ${
+              className={`flex items-center justify-center gap-1.5 text-xs p-2 sm:px-2.5 sm:py-1.5 rounded-lg border transition ${
                 syncStatus === 'synced'
                   ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20'
                   : syncStatus === 'syncing'
@@ -2397,7 +2436,7 @@ export default function App() {
             <button
               onClick={handleExportJSON}
               title="Esporta Backup JSON"
-              className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition ${
+              className={`hidden sm:flex items-center justify-center text-xs p-2 sm:px-2.5 sm:py-1.5 rounded-lg border transition ${
                 isLight
                   ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
                   : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
@@ -2408,7 +2447,7 @@ export default function App() {
             <button
               onClick={() => fileInputRef.current?.click()}
               title="Importa Backup JSON"
-              className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition ${
+              className={`hidden sm:flex items-center justify-center text-xs p-2 sm:px-2.5 sm:py-1.5 rounded-lg border transition ${
                 isLight
                   ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
                   : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
@@ -2420,7 +2459,7 @@ export default function App() {
             <button
               onClick={handleResetDemo}
               title="Ripristina dati demo"
-              className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition ${
+              className={`flex items-center justify-center text-xs p-2 sm:px-2.5 sm:py-1.5 rounded-lg border transition ${
                 isLight
                   ? 'bg-slate-100 hover:bg-rose-50 border-slate-300 hover:border-rose-300 text-slate-600 hover:text-rose-600'
                   : 'bg-slate-900 hover:bg-rose-950/50 border-slate-800 hover:border-rose-800/60 text-slate-400 hover:text-rose-300'
@@ -2431,11 +2470,11 @@ export default function App() {
           </div>
         </div>
 
-        {/* BARRA NAVIGAZIONE */}
-        <nav className="max-w-5xl mx-auto px-4 pb-2.5 flex gap-2">
+        {/* BARRA NAVIGAZIONE RESPONSIVE */}
+        <nav className="max-w-5xl mx-auto px-3 sm:px-4 pb-2.5 grid grid-cols-3 sm:flex gap-1.5 sm:gap-2">
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${
+            className={`flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition ${
               activeTab === 'dashboard'
                 ? isLight
                   ? 'bg-slate-900 text-white shadow-sm'
@@ -2443,53 +2482,53 @@ export default function App() {
                 : `${cTextSecondary} hover:${cTextPrimary}`
             }`}
           >
-            <LayoutDashboard className="w-4 h-4 text-sky-400" />
-            <span>Dashboard</span>
+            <LayoutDashboard className="w-4 h-4 text-sky-400 shrink-0" />
+            <span className="truncate">Dashboard</span>
           </button>
 
           <button
             onClick={() => setActiveTab('nutrition')}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${
+            className={`flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition ${
               activeTab === 'nutrition'
                 ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/40'
                 : `${cTextSecondary} hover:${cTextPrimary}`
             }`}
           >
-            <Utensils className="w-4 h-4 text-emerald-500" />
-            <span>Alimentazione &amp; Peso</span>
+            <Utensils className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span className="truncate">Dieta &amp; Peso</span>
           </button>
 
           <button
             onClick={() => setActiveTab('workout')}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${
+            className={`flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition ${
               activeTab === 'workout'
                 ? 'bg-indigo-500/15 text-indigo-500 border border-indigo-500/40'
                 : `${cTextSecondary} hover:${cTextPrimary}`
             }`}
           >
-            <Dumbbell className="w-4 h-4 text-indigo-500" />
-            <span>Allenamento (3x)</span>
+            <Dumbbell className="w-4 h-4 text-indigo-500 shrink-0" />
+            <span className="truncate">Workout (3x)</span>
           </button>
         </nav>
       </header>
 
       {/* PANNELLO PERSONALIZZAZIONE SFONDO */}
       {bgModalOpen && (
-        <div className="max-w-5xl mx-auto px-4 pt-4">
-          <div className={`${cCard} border border-indigo-500/40 rounded-2xl p-5 space-y-4 shadow-xl`}>
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 pt-4">
+          <div className={`${cCard} border border-indigo-500/40 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Palette className="w-4 h-4 text-indigo-500" />
                 <h3 className={`font-semibold text-sm ${cTextPrimary}`}>Personalizza Sfondo dell&apos;App</h3>
               </div>
-              <button onClick={() => setBgModalOpen(false)} className={cTextSecondary}>
+              <button onClick={() => setBgModalOpen(false)} className={`p-1 ${cTextSecondary}`}>
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="space-y-2">
               <div className={`text-xs font-semibold ${cTextSecondary}`}>Sfondi Sfumati &amp; Predefinito</div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2">
                 <button
                   type="button"
                   onClick={() => updateBackground({ type: 'default' })}
@@ -2500,7 +2539,7 @@ export default function App() {
                   }`}
                 >
                   <div
-                    className={`w-full h-9 rounded-lg border ${
+                    className={`w-full h-8 rounded-lg border ${
                       isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-950 border-slate-800'
                     }`}
                   />
@@ -2521,7 +2560,7 @@ export default function App() {
                       }`}
                     >
                       <div
-                        className="w-full h-9 rounded-lg border border-white/10"
+                        className="w-full h-8 rounded-lg border border-white/10"
                         style={{ background: preset.preview }}
                       />
                       <span className={`text-[11px] font-medium truncate ${cTextPrimary}`}>{preset.name}</span>
@@ -2544,24 +2583,24 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => updateBackground({ type: 'color' })}
-                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold border transition ${
+                    className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold border transition ${
                       data.background.type === 'color'
                         ? 'bg-indigo-600 border-indigo-500 text-white'
                         : `${cInner} ${cTextPrimary}`
                     }`}
                   >
-                    Applica Colore ({data.background.color})
+                    Applica Colore
                   </button>
                 </div>
               </div>
 
               <div className="md:col-span-8 space-y-2">
                 <div className={`text-xs font-semibold ${cTextSecondary}`}>Foto o Immagine Personalizzata</div>
-                <div className="flex flex-wrap sm:flex-nowrap gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <button
                     type="button"
                     onClick={() => bgFileInputRef.current?.click()}
-                    className={`px-3 py-2 rounded-xl text-xs font-semibold border flex items-center gap-1.5 whitespace-nowrap transition ${cInner} ${cTextPrimary} hover:border-indigo-500`}
+                    className={`px-3 py-2.5 rounded-xl text-xs font-semibold border flex items-center justify-center gap-1.5 whitespace-nowrap transition ${cInner} ${cTextPrimary} hover:border-indigo-500`}
                   >
                     <ImageIcon className="w-3.5 h-3.5 text-indigo-500" />
                     Carica Foto
@@ -2574,30 +2613,32 @@ export default function App() {
                     className="hidden"
                   />
 
-                  <input
-                    type="url"
-                    placeholder="Oppure incolla URL immagine (https://...)"
-                    value={customImageInput}
-                    onChange={(e) => setCustomImageInput(e.target.value)}
-                    className={`flex-1 ${cInput} border rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (customImageInput.trim()) {
-                        updateBackground({ type: 'image', imageUrl: customImageInput.trim() });
-                      }
-                    }}
-                    className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
-                  >
-                    Usa URL
-                  </button>
+                  <div className="flex flex-1 gap-2">
+                    <input
+                      type="url"
+                      placeholder="URL immagine (https://...)"
+                      value={customImageInput}
+                      onChange={(e) => setCustomImageInput(e.target.value)}
+                      className={`flex-1 ${cInput} border rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (customImageInput.trim()) {
+                          updateBackground({ type: 'image', imageUrl: customImageInput.trim() });
+                        }
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shrink-0"
+                    >
+                      Usa URL
+                    </button>
+                  </div>
                 </div>
 
                 {data.background.type === 'image' && data.background.imageUrl && (
                   <div className="flex items-center gap-3 pt-1">
                     <span className={`text-[11px] ${cTextSecondary} whitespace-nowrap`}>
-                      Contrasto lettura ({Math.round((data.background.overlayOpacity ?? 0.55) * 100)}%):
+                      Contrasto ({Math.round((data.background.overlayOpacity ?? 0.55) * 100)}%):
                     </span>
                     <input
                       type="range"
@@ -2612,13 +2653,31 @@ export default function App() {
                 )}
               </div>
             </div>
+
+            {/* Backup rapido anche da mobile */}
+            <div className={`sm:hidden flex gap-2 pt-3 border-t ${isLight ? 'border-slate-200' : 'border-slate-800'}`}>
+              <button
+                type="button"
+                onClick={handleExportJSON}
+                className={`flex-1 py-2 rounded-xl text-xs font-semibold border flex items-center justify-center gap-1.5 ${cInner} ${cTextPrimary}`}
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-500" /> Esporta JSON
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className={`flex-1 py-2 rounded-xl text-xs font-semibold border flex items-center justify-center gap-1.5 ${cInner} ${cTextPrimary}`}
+              >
+                <Upload className="w-3.5 h-3.5 text-indigo-500" /> Importa JSON
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* BANNER INFORMATIVO MODALITÀ RIORDINO */}
       {reorderMode && (
-        <div className="max-w-5xl mx-auto px-4 pt-4">
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 pt-4">
           <div
             className={`rounded-2xl px-4 py-3 border flex flex-wrap items-center justify-between gap-2 text-xs ${
               isLight
@@ -2627,14 +2686,11 @@ export default function App() {
             }`}
           >
             <span>
-              <strong>Modalità Riordino attiva:</strong> usa le frecce <strong>Su / Giù</strong> su ogni riquadro per personalizzare l&apos;ordine delle sezioni.
+              <strong>Modalità Riordino:</strong> usa le frecce <strong>Su / Giù</strong> su ogni sezione.
             </span>
             <div className="flex items-center gap-2">
-              <button
-                onClick={resetLayoutOrder}
-                className="underline font-semibold hover:opacity-80"
-              >
-                Ripristina ordine default
+              <button onClick={resetLayoutOrder} className="underline font-semibold hover:opacity-80">
+                Reset ordine
               </button>
               <button
                 onClick={() => setReorderMode(false)}
@@ -2648,15 +2704,15 @@ export default function App() {
       )}
 
       {/* MAIN CONTENT */}
-      <main className="max-w-5xl mx-auto px-4 pt-6 space-y-6">
+      <main className="max-w-5xl mx-auto px-3 sm:px-4 pt-4 sm:pt-6 space-y-5 sm:space-y-6">
         {activeTab === 'dashboard' && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {data.layout.dashboard.map((secId) => dashboardSections[secId] || null)}
           </div>
         )}
 
         {activeTab === 'nutrition' && (
-          <div className="space-y-5">
+          <div className="space-y-4 sm:space-y-5">
             {data.layout.nutrition.map((secId) => {
               if (secId === 'subNav') {
                 return renderReorderWrapper(
@@ -2664,27 +2720,28 @@ export default function App() {
                   'subNav',
                   'Barra Sotto-Sezioni Alimentazione',
                   <div className="space-y-3">
-                    <div className={`flex flex-wrap items-center justify-between gap-3 ${cCard} border p-2 rounded-2xl`}>
-                      <div className="flex flex-wrap gap-1.5">
+                    <div className={`flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 ${cCard} border p-2 rounded-2xl`}>
+                      <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5">
                         {[
-                          { id: 'planner', label: 'Piano Settimanale', icon: Calendar },
-                          { id: 'composer', label: 'Componi Pasti', icon: Plus },
-                          { id: 'foods', label: `Alimenti (${data.foods.length})`, icon: Utensils },
-                          { id: 'weight', label: 'Tracker Peso', icon: Scale },
+                          { id: 'planner', label: 'Piano', fullLabel: 'Piano Settimanale', icon: Calendar },
+                          { id: 'composer', label: 'Componi', fullLabel: 'Componi Pasti', icon: Plus },
+                          { id: 'foods', label: `Alimenti (${data.foods.length})`, fullLabel: `Alimenti (${data.foods.length})`, icon: Utensils },
+                          { id: 'weight', label: 'Peso', fullLabel: 'Tracker Peso', icon: Scale },
                         ].map((tab) => {
                           const Icon = tab.icon;
                           return (
                             <button
                               key={tab.id}
                               onClick={() => setNutritionSubTab(tab.id)}
-                              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition ${
+                              className={`flex items-center justify-center sm:justify-start gap-1.5 px-3 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition ${
                                 nutritionSubTab === tab.id
                                   ? 'bg-emerald-500 text-white font-semibold'
                                   : `${cTextSecondary}`
                               }`}
                             >
-                              <Icon className="w-4 h-4" />
-                              {tab.label}
+                              <Icon className="w-4 h-4 shrink-0" />
+                              <span className="sm:hidden">{tab.label}</span>
+                              <span className="hidden sm:inline">{tab.fullLabel}</span>
                             </button>
                           );
                         })}
@@ -2696,7 +2753,7 @@ export default function App() {
                             setTempTargets(data.targets);
                             setEditingTargets(true);
                           }}
-                          className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl ${cInner} border ${cTextPrimary} transition`}
+                          className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-xs px-3 py-2.5 sm:py-2 rounded-xl ${cInner} border ${cTextPrimary} transition`}
                         >
                           <Settings className="w-3.5 h-3.5 text-emerald-500" />
                           Target Macro
@@ -2705,7 +2762,7 @@ export default function App() {
                         <button
                           onClick={handleResetNutritionSubPage}
                           title="Azzera a 0 tutti i dati di questa sezione"
-                          className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-500 font-semibold transition"
+                          className="flex items-center justify-center gap-1.5 text-xs px-3 py-2.5 sm:py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-500 font-semibold transition whitespace-nowrap"
                         >
                           <Eraser className="w-3.5 h-3.5" />
                           <span>Azzera a 0</span>
@@ -2717,11 +2774,11 @@ export default function App() {
                       <div className={`${cCard} border border-emerald-500/40 rounded-2xl p-4 space-y-3`}>
                         <div className="flex items-center justify-between">
                           <h3 className="font-semibold text-sm text-emerald-500">Imposta Obiettivi Giornalieri</h3>
-                          <button onClick={() => setEditingTargets(false)} className={cTextSecondary}>
+                          <button onClick={() => setEditingTargets(false)} className={`p-1 ${cTextSecondary}`}>
                             <X className="w-4 h-4" />
                           </button>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
                           {[
                             { key: 'kcal', label: 'Calorie (kcal)' },
                             { key: 'p', label: 'Proteine (g)' },
@@ -2734,7 +2791,7 @@ export default function App() {
                                 type="number"
                                 value={tempTargets[field.key]}
                                 onChange={(e) => setTempTargets({ ...tempTargets, [field.key]: Number(e.target.value) })}
-                                className={`w-full ${cInput} border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500`}
+                                className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2 focus:outline-none focus:border-emerald-500`}
                               />
                             </div>
                           ))}
@@ -2745,7 +2802,7 @@ export default function App() {
                               setData((prev) => ({ ...prev, targets: tempTargets }));
                               setEditingTargets(false);
                             }}
-                            className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-bold"
+                            className="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-bold"
                           >
                             Salva Obiettivi
                           </button>
@@ -2763,25 +2820,25 @@ export default function App() {
                   'Contenuto Principale Alimentazione',
                   <div>
                     {nutritionSubTab === 'planner' && (
-                      <div className="space-y-5">
+                      <div className="space-y-4 sm:space-y-5">
                         {data.layout.planner.map((pId) => plannerSections[pId] || null)}
                       </div>
                     )}
 
                     {nutritionSubTab === 'composer' && (
-                      <div className="space-y-5">
+                      <div className="space-y-4 sm:space-y-5">
                         {data.layout.composer.map((cId) => composerSections[cId] || null)}
                       </div>
                     )}
 
                     {nutritionSubTab === 'foods' && (
-                      <div className="space-y-5">
+                      <div className="space-y-4 sm:space-y-5">
                         {data.layout.foods.map((fId) => foodsSections[fId] || null)}
                       </div>
                     )}
 
                     {nutritionSubTab === 'weight' && (
-                      <div className="space-y-5">
+                      <div className="space-y-4 sm:space-y-5">
                         {data.layout.weight.map((wId) => weightSections[wId] || null)}
                       </div>
                     )}
@@ -2795,25 +2852,26 @@ export default function App() {
         )}
 
         {activeTab === 'workout' && (
-          <div className="space-y-5">
+          <div className="space-y-4 sm:space-y-5">
             {data.layout.workout.map((wId) => workoutSections[wId] || null)}
           </div>
         )}
       </main>
 
-      {/* BARRA FLOATING TIMER (SERIE + CAMBIO ESERCIZIO) */}
+      {/* BARRA FLOATING TIMER RESPONSIVE (SMARTPHONE, TABLET & MAC) */}
       <div
-        className={`fixed bottom-0 inset-x-0 z-40 backdrop-blur-lg border-t shadow-2xl transition-colors ${
+        className={`fixed bottom-0 inset-x-0 z-40 backdrop-blur-lg border-t shadow-2xl transition-colors pb-[env(safe-area-inset-bottom)] ${
           isLight
-            ? 'bg-white/94 border-slate-200'
-            : 'bg-slate-900/94 border-slate-800'
+            ? 'bg-white/95 border-slate-200'
+            : 'bg-slate-900/95 border-slate-800'
         }`}
       >
-        <div className="max-w-5xl mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5">
-            <div className="flex flex-col items-start">
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2 sm:py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-2">
+          {/* Riga 1 su Mobile: Display Tempo + Controlli Play/Pausa/Reset + -15/+15 */}
+          <div className="flex items-center justify-between md:justify-start gap-2.5">
+            <div className="flex items-center gap-2">
               <div
-                className={`px-3 py-1 rounded-xl font-mono text-xl font-bold border transition leading-tight ${
+                className={`px-3 py-1 rounded-xl font-mono text-lg sm:text-xl font-bold border transition leading-tight ${
                   timerFinishedAlert
                     ? 'bg-emerald-500 text-white border-emerald-400 animate-pulse'
                     : timerRunning
@@ -2826,11 +2884,13 @@ export default function App() {
                 {formatSeconds(timerSeconds)}
               </div>
               <span
-                className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 px-1 ${
-                  timerType === 'exercise' ? 'text-amber-500' : 'text-indigo-500'
+                className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                  timerType === 'exercise'
+                    ? 'bg-amber-500/15 text-amber-500'
+                    : 'bg-indigo-500/15 text-indigo-500'
                 }`}
               >
-                {timerType === 'exercise' ? 'Cambio Esercizio' : 'Tra Serie'}
+                {timerType === 'exercise' ? 'Cambio Es.' : 'Tra Serie'}
               </span>
             </div>
 
@@ -2864,6 +2924,19 @@ export default function App() {
               </button>
 
               <button
+                onClick={() => adjustTimer(-15)}
+                className={`px-2 py-2 rounded-xl ${cInner} border text-xs font-semibold ${cTextSecondary}`}
+              >
+                -15s
+              </button>
+              <button
+                onClick={() => adjustTimer(15)}
+                className={`px-2 py-2 rounded-xl ${cInner} border text-xs font-semibold ${cTextSecondary}`}
+              >
+                +15s
+              </button>
+
+              <button
                 onClick={() => setSoundEnabled(!soundEnabled)}
                 className={`p-2.5 rounded-xl transition ${
                   isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
@@ -2874,16 +2947,17 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto">
+          {/* Riga 2 su Mobile: Preset Rapidi Serie vs Cambio Esercizio */}
+          <div className="flex items-center justify-between md:justify-end gap-1.5 overflow-x-auto">
             <div className="flex items-center gap-1">
-              <span className={`hidden sm:inline text-[10px] uppercase font-bold ${cTextSecondary} mr-0.5`}>
+              <span className={`text-[10px] uppercase font-bold ${cTextSecondary} mr-0.5`}>
                 Serie:
               </span>
               {[60, 90, 120].map((sec) => (
                 <button
                   key={sec}
                   onClick={() => startTimer(sec, 'set')}
-                  className={`px-2 py-1.5 rounded-lg border text-xs font-semibold transition ${
+                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
                     timerType === 'set' && timerInitial === sec
                       ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-500'
                       : `${cInner} ${cTextPrimary}`
@@ -2897,14 +2971,14 @@ export default function App() {
             <div className={`h-5 w-px mx-0.5 ${isLight ? 'bg-slate-300' : 'bg-slate-800'}`} />
 
             <div className="flex items-center gap-1">
-              <span className="hidden sm:inline text-[10px] uppercase font-bold text-amber-500 mr-0.5">
+              <span className="text-[10px] uppercase font-bold text-amber-500 mr-0.5">
                 Es.:
               </span>
               {[150, 180, 240].map((sec) => (
                 <button
                   key={sec}
                   onClick={() => startTimer(sec, 'exercise')}
-                  className={`px-2 py-1.5 rounded-lg border text-xs font-semibold transition ${
+                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
                     timerType === 'exercise' && timerInitial === sec
                       ? 'bg-amber-500/20 border-amber-500/50 text-amber-500'
                       : `${cInner} text-amber-500`
@@ -2913,21 +2987,6 @@ export default function App() {
                   {sec === 150 ? '2m30' : `${sec / 60}m`}
                 </button>
               ))}
-            </div>
-
-            <div className="flex items-center gap-1 ml-0.5">
-              <button
-                onClick={() => adjustTimer(-15)}
-                className={`px-2 py-1.5 rounded-lg ${cInner} border text-xs ${cTextSecondary}`}
-              >
-                -15s
-              </button>
-              <button
-                onClick={() => adjustTimer(15)}
-                className={`px-2 py-1.5 rounded-lg ${cInner} border text-xs ${cTextSecondary}`}
-              >
-                +15s
-              </button>
             </div>
 
             <label className={`hidden lg:flex items-center gap-1.5 ml-1.5 text-xs ${cTextSecondary} cursor-pointer select-none`}>
