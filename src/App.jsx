@@ -11,7 +11,6 @@ import {
   Play,
   Pause,
   RotateCcw,
-  Check,
   CheckCircle2,
   Circle,
   Flame,
@@ -20,30 +19,21 @@ import {
   Upload,
   Settings,
   ChevronRight,
-  ChevronDown,
-  ChevronUp,
   Volume2,
   VolumeX,
-  TrendingDown,
-  TrendingUp,
   Edit3,
   X,
-  Award,
-  Sparkles,
   Calendar,
-  ArrowRight,
   Cloud,
   CloudOff,
   RefreshCw,
 } from 'lucide-react';
 
-// --- CONFIGURAZIONE SUPABASE ---
 const SUPABASE_URL = 'https://qwxfjrunqhssoonapfcl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_skGnR2B-ijOkbn0YVLXv2Q_INgXLDaF';
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const CLOUD_RECORD_ID = 'davide_main_profile';
 
-// --- DATI INIZIALI DI ESEMPIO ---
 const DAYS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 const FULL_DAYS = {
   Lun: 'Lunedì',
@@ -178,7 +168,6 @@ const INITIAL_TARGETS = {
 
 const STORAGE_KEY = 'fittrack_pro_data_v1';
 
-// --- SUONO TIMER CON WEB AUDIO API ---
 function playTimerBeep() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -197,20 +186,15 @@ function playTimerBeep() {
       osc.start(ctx.currentTime + idx * 0.14);
       osc.stop(ctx.currentTime + idx * 0.14 + 0.36);
     });
-  } catch (e) {
-    // Fallback silenzioso
-  }
+  } catch (e) {}
 }
 
 export default function App() {
-  // --- STATO GLOBALE PERSISTENTE ---
   const [data, setData] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) {}
     return {
       foods: INITIAL_FOODS,
       meals: INITIAL_MEALS,
@@ -221,14 +205,12 @@ export default function App() {
     };
   });
 
-  // --- STATO SYNC CLOUD SUPABASE ---
-  const [syncStatus, setSyncStatus] = useState('syncing'); // 'syncing' | 'synced' | 'error'
+  const [syncStatus, setSyncStatus] = useState('syncing');
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const isRemoteUpdate = useRef(false);
   const hasLoadedInitialCloud = useRef(false);
   const saveTimeoutRef = useRef(null);
 
-  // Scarica dati da Supabase all'avvio o al ritorno sulla tab
   const pullFromCloud = useCallback(async () => {
     setSyncStatus('syncing');
     try {
@@ -246,7 +228,6 @@ export default function App() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(row.data));
         setLastSyncedAt(new Date(row.updated_at || Date.now()));
       } else {
-        // Primo avvio assoluto sul cloud: carica i dati attuali su Supabase
         const nowIso = new Date().toISOString();
         const { error: upsertErr } = await supabase
           .from('fittrack_sync')
@@ -257,7 +238,6 @@ export default function App() {
       hasLoadedInitialCloud.current = true;
       setSyncStatus('synced');
     } catch (err) {
-      console.error('Errore sync Supabase (pull):', err);
       hasLoadedInitialCloud.current = true;
       setSyncStatus('error');
     }
@@ -265,29 +245,22 @@ export default function App() {
 
   useEffect(() => {
     pullFromCloud();
-
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        pullFromCloud();
-      }
+      if (document.visibilityState === 'visible') pullFromCloud();
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [pullFromCloud]);
 
-  // Salva in localStorage e invia a Supabase (con debounce di 700ms)
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) {}
 
     if (isRemoteUpdate.current) {
       isRemoteUpdate.current = false;
       return;
     }
-
     if (!hasLoadedInitialCloud.current) return;
 
     setSyncStatus('syncing');
@@ -303,7 +276,6 @@ export default function App() {
         setLastSyncedAt(new Date());
         setSyncStatus('synced');
       } catch (err) {
-        console.error('Errore sync Supabase (push):', err);
         setSyncStatus('error');
       }
     }, 700);
@@ -313,22 +285,19 @@ export default function App() {
     };
   }, [data]);
 
-  // --- NAVIGAZIONE E UI ---
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'nutrition' | 'workout'
-  const [nutritionSubTab, setNutritionSubTab] = useState('planner'); // 'planner' | 'composer' | 'foods' | 'weight'
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [nutritionSubTab, setNutritionSubTab] = useState('planner');
   const [selectedDay, setSelectedDay] = useState(() => {
-    const jsDay = new Date().getDay(); // 0=Dom, 1=Lun...
+    const jsDay = new Date().getDay();
     return jsDay === 0 ? 'Dom' : DAYS[jsDay - 1];
   });
 
-  // --- STATO ALLENAMENTO LIVE & TIMER ---
   const [activeWorkoutId, setActiveWorkoutId] = useState('wo-a');
-  const [workoutMode, setWorkoutMode] = useState('live'); // 'live' | 'edit'
-  const [completedSets, setCompletedSets] = useState({}); // { "e1-0": true, ... }
+  const [workoutMode, setWorkoutMode] = useState('live');
+  const [completedSets, setCompletedSets] = useState({});
   const [autoStartTimer, setAutoStartTimer] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // Timer state
   const [timerSeconds, setTimerSeconds] = useState(90);
   const [timerInitial, setTimerInitial] = useState(90);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -363,7 +332,6 @@ export default function App() {
     setTimerInitial((prev) => Math.max(15, prev + delta));
   };
 
-  // --- HELPER CALCOLO MACRO ---
   const getFoodById = (id) => data.foods.find((f) => f.id === id);
 
   const getMealMacros = (meal) => {
@@ -405,24 +373,17 @@ export default function App() {
     };
   };
 
-  // --- FORM STATES ---
-  // Nuovo alimento
   const [newFood, setNewFood] = useState({ name: '', kcal: '', p: '', c: '', g: '' });
-  // Compositore pasto
   const [mealName, setMealName] = useState('');
   const [mealItems, setMealItems] = useState([]);
   const [selectedFoodToAdd, setSelectedFoodToAdd] = useState('');
   const [selectedFoodQty, setSelectedFoodQty] = useState('1');
-  // Peso
   const [newWeight, setNewWeight] = useState('');
   const [newWeightDate, setNewWeightDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [newWeightNote, setNewWeightNote] = useState('');
-  // Target modal
   const [editingTargets, setEditingTargets] = useState(false);
   const [tempTargets, setTempTargets] = useState(data.targets);
-  // Copia giorno
   const [copyTargetDay, setCopyTargetDay] = useState('Mar');
-  // Aggiunta esercizio
   const [newExercise, setNewExercise] = useState({
     name: '',
     sets: '3',
@@ -434,7 +395,6 @@ export default function App() {
 
   const fileInputRef = useRef(null);
 
-  // --- AZIONI ALIMENTAZIONE ---
   const handleAddFood = (e) => {
     e.preventDefault();
     if (!newFood.name.trim()) return;
@@ -523,7 +483,6 @@ export default function App() {
     }));
   };
 
-  // --- AZIONI PESO ---
   const handleAddWeight = (e) => {
     e.preventDefault();
     const val = parseFloat(newWeight.replace(',', '.'));
@@ -549,7 +508,6 @@ export default function App() {
     }));
   };
 
-  // --- AZIONI ALLENAMENTO ---
   const toggleSetCompleted = (exercise, setIndex) => {
     const key = `${exercise.id}-${setIndex}`;
     const nextState = !completedSets[key];
@@ -606,7 +564,6 @@ export default function App() {
     }));
   };
 
-  // --- BACKUP & RESET ---
   const handleExportJSON = () => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -624,9 +581,7 @@ export default function App() {
     reader.onload = (ev) => {
       try {
         const parsed = JSON.parse(ev.target.result);
-        if (parsed.foods && parsed.workouts) {
-          setData(parsed);
-        }
+        if (parsed.foods && parsed.workouts) setData(parsed);
       } catch (err) {
         alert('File JSON non valido.');
       }
@@ -636,19 +591,17 @@ export default function App() {
 
   const handleResetDemo = () => {
     if (!window.confirm('Vuoi ripristinare i dati dimostrativi iniziali?')) return;
-    const fresh = {
+    setData({
       foods: INITIAL_FOODS,
       meals: INITIAL_MEALS,
       weeklyPlan: INITIAL_WEEKLY_PLAN,
       weights: INITIAL_WEIGHTS,
       workouts: INITIAL_WORKOUTS,
       targets: INITIAL_TARGETS,
-    };
-    setData(fresh);
+    });
     setCompletedSets({});
   };
 
-  // --- VALORI CALCOLATI PER LA VISTA CORRENTE ---
   const dayMacros = getDayMacros(selectedDay);
   const currentWorkout = data.workouts.find((w) => w.id === activeWorkoutId) || data.workouts[0];
 
@@ -661,7 +614,6 @@ export default function App() {
   const weightDeltaTotal =
     latestWeight && firstWeight ? (latestWeight.weight - firstWeight.weight).toFixed(1) : null;
 
-  // Calcolo progresso allenamento corrente
   const totalSetsInWorkout = currentWorkout
     ? currentWorkout.exercises.reduce((sum, ex) => sum + ex.sets, 0)
     : 0;
@@ -681,7 +633,6 @@ export default function App() {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // --- COMPONENTE GRAFICO PESO SVG ---
   const renderWeightChart = (height = 140) => {
     if (sortedWeights.length < 2) {
       return (
@@ -722,52 +673,17 @@ export default function App() {
             </linearGradient>
           </defs>
           <line x1={padX} y1={padY} x2={width - padX} y2={padY} stroke="#1e293b" strokeDasharray="4 4" />
-          <line
-            x1={padX}
-            y1={height / 2}
-            x2={width - padX}
-            y2={height / 2}
-            stroke="#1e293b"
-            strokeDasharray="4 4"
-          />
-          <line
-            x1={padX}
-            y1={height - padY}
-            x2={width - padX}
-            y2={height - padY}
-            stroke="#1e293b"
-          />
-
+          <line x1={padX} y1={height / 2} x2={width - padX} y2={height / 2} stroke="#1e293b" strokeDasharray="4 4" />
+          <line x1={padX} y1={height - padY} x2={width - padX} y2={height - padY} stroke="#1e293b" />
           <polygon points={areaPoints} fill="url(#weightGrad)" />
-          <polyline
-            fill="none"
-            stroke="#10b981"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            points={polylinePoints}
-          />
-
+          <polyline fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={polylinePoints} />
           {points.map((p) => (
             <g key={p.id}>
               <circle cx={p.x} cy={p.y} r="4.5" fill="#090d16" stroke="#10b981" strokeWidth="2.5" />
-              <text
-                x={p.x}
-                y={p.y - 10}
-                textAnchor="middle"
-                fill="#e2e8f0"
-                fontSize="11"
-                fontWeight="600"
-              >
+              <text x={p.x} y={p.y - 10} textAnchor="middle" fill="#e2e8f0" fontSize="11" fontWeight="600">
                 {p.weight}
               </text>
-              <text
-                x={p.x}
-                y={height - 4}
-                textAnchor="middle"
-                fill="#64748b"
-                fontSize="10"
-              >
+              <text x={p.x} y={height - 4} textAnchor="middle" fill="#64748b" fontSize="10">
                 {p.date.slice(5)}
               </text>
             </g>
@@ -779,7 +695,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-emerald-500/30 pb-28">
-      {/* HEADER SUPERIORE */}
       <header className="sticky top-0 z-30 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80">
         <div className="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -796,7 +711,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Pulsanti Cloud Sync, Export/Import & Reset */}
           <div className="flex items-center gap-2">
             <button
               onClick={pullFromCloud}
@@ -821,17 +735,12 @@ export default function App() {
               {syncStatus === 'syncing' && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
               {syncStatus === 'error' && <CloudOff className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline font-medium">
-                {syncStatus === 'synced'
-                  ? 'Cloud Sync'
-                  : syncStatus === 'syncing'
-                  ? 'Sync...'
-                  : 'Offline'}
+                {syncStatus === 'synced' ? 'Cloud Sync' : syncStatus === 'syncing' ? 'Sync...' : 'Offline'}
               </span>
             </button>
 
             <button
               onClick={handleExportJSON}
-              title="Esporta Backup JSON"
               className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 transition"
             >
               <Download className="w-3.5 h-3.5 text-emerald-400" />
@@ -839,22 +748,14 @@ export default function App() {
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
-              title="Importa Backup JSON"
               className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 transition"
             >
               <Upload className="w-3.5 h-3.5 text-indigo-400" />
               <span className="hidden sm:inline">Importa</span>
             </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              onChange={handleImportJSON}
-              className="hidden"
-            />
+            <input ref={fileInputRef} type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
             <button
               onClick={handleResetDemo}
-              title="Ripristina dati demo"
               className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-rose-950/50 border border-slate-800 hover:border-rose-800/60 text-slate-400 hover:text-rose-300 transition"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -863,7 +764,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* BARRA NAVIGAZIONE PRINCIPALE */}
         <nav className="max-w-5xl mx-auto px-4 pb-2.5 flex gap-2">
           <button
             onClick={() => setActiveTab('dashboard')}
@@ -903,23 +803,16 @@ export default function App() {
         </nav>
       </header>
 
-      {/* CONTENUTO PRINCIPALE */}
       <main className="max-w-5xl mx-auto px-4 pt-6 space-y-6">
-        {/* ========================================================= */}
-        {/* 1. DASHBOARD RIEPILOGATIVA                                 */}
-        {/* ========================================================= */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            {/* Selettore Giorno Rapido */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-semibold flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-emerald-400" />
                   Riepilogo Giornaliero
                 </h2>
-                <p className="text-xs text-slate-400">
-                  Visualizza macro e stato workout per il giorno selezionato
-                </p>
+                <p className="text-xs text-slate-400">Visualizza macro e stato workout per il giorno selezionato</p>
               </div>
               <div className="flex gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-x-auto">
                 {DAYS.map((d) => (
@@ -927,9 +820,7 @@ export default function App() {
                     key={d}
                     onClick={() => setSelectedDay(d)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                      selectedDay === d
-                        ? 'bg-emerald-500 text-slate-950'
-                        : 'text-slate-400 hover:text-white'
+                      selectedDay === d ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'
                     }`}
                   >
                     {d}
@@ -938,9 +829,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Griglia Cards Principali */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              {/* Card Calorie & Macro */}
               <div className="lg:col-span-7 bg-slate-900/80 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-2.5">
@@ -948,12 +837,8 @@ export default function App() {
                       <Utensils className="w-5 h-5 text-emerald-400" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-slate-100">
-                        Alimentazione — {FULL_DAYS[selectedDay]}
-                      </h3>
-                      <p className="text-xs text-slate-400">
-                        Bilancio energetico e macronutrienti
-                      </p>
+                      <h3 className="font-semibold text-slate-100">Alimentazione — {FULL_DAYS[selectedDay]}</h3>
+                      <p className="text-xs text-slate-400">Bilancio energetico e macronutrienti</p>
                     </div>
                   </div>
                   <button
@@ -964,12 +849,9 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Barra Calorie */}
                 <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-4 mb-4">
                   <div className="flex justify-between items-baseline mb-2">
-                    <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
-                      Calorie Pianificate
-                    </span>
+                    <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Calorie Pianificate</span>
                     <div className="text-right">
                       <span className="text-2xl font-bold text-white">{dayMacros.kcal}</span>
                       <span className="text-xs text-slate-400"> / {data.targets.kcal} kcal</span>
@@ -978,14 +860,11 @@ export default function App() {
                   <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300"
-                      style={{
-                        width: `${Math.min(100, Math.round((dayMacros.kcal / (data.targets.kcal || 1)) * 100))}%`,
-                      }}
+                      style={{ width: `${Math.min(100, Math.round((dayMacros.kcal / (data.targets.kcal || 1)) * 100))}%` }}
                     />
                   </div>
                 </div>
 
-                {/* 3 Barre Macro */}
                 <div className="grid grid-cols-3 gap-3">
                   {[
                     { label: 'Proteine', val: dayMacros.p, target: data.targets.p, color: 'bg-sky-400' },
@@ -1008,7 +887,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Card Andamento Peso */}
               <div className="lg:col-span-5 bg-slate-900/80 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2.5">
@@ -1037,9 +915,7 @@ export default function App() {
                     {weightDeltaTotal !== null && (
                       <span
                         className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                          Number(weightDeltaTotal) <= 0
-                            ? 'bg-emerald-500/15 text-emerald-300'
-                            : 'bg-amber-500/15 text-amber-300'
+                          Number(weightDeltaTotal) <= 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'
                         }`}
                       >
                         {Number(weightDeltaTotal) > 0 ? `+${weightDeltaTotal}` : weightDeltaTotal} kg tot
@@ -1054,7 +930,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Card Avvio Rapido Allenamento */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <div className="flex items-center gap-2.5">
@@ -1062,12 +937,8 @@ export default function App() {
                     <Dumbbell className="w-5 h-5 text-indigo-400" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-slate-100">
-                      Schede Allenamento (3x Settimana • Manubri + Corpo Libero)
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      Scegli la sessione di oggi per avviare il tracker serie e il timer di recupero
-                    </p>
+                    <h3 className="font-semibold text-slate-100">Schede Allenamento (3x Settimana • Manubri + Corpo Libero)</h3>
+                    <p className="text-xs text-slate-400">Scegli la sessione di oggi per avviare il tracker serie e il timer di recupero</p>
                   </div>
                 </div>
               </div>
@@ -1106,12 +977,8 @@ export default function App() {
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* 2. SEZIONE ALIMENTAZIONE & PESO                           */}
-        {/* ========================================================= */}
         {activeTab === 'nutrition' && (
           <div className="space-y-5">
-            {/* Sub-navigazione */}
             <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-2 rounded-2xl">
               <div className="flex flex-wrap gap-1.5">
                 {[
@@ -1150,13 +1017,10 @@ export default function App() {
               </button>
             </div>
 
-            {/* Modal Modifica Target */}
             {editingTargets && (
               <div className="bg-slate-900 border border-emerald-500/40 rounded-2xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-sm text-emerald-300">
-                    Imposta Obiettivi Giornalieri
-                  </h3>
+                  <h3 className="font-semibold text-sm text-emerald-300">Imposta Obiettivi Giornalieri</h3>
                   <button onClick={() => setEditingTargets(false)} className="text-slate-400 hover:text-white">
                     <X className="w-4 h-4" />
                   </button>
@@ -1173,9 +1037,7 @@ export default function App() {
                       <input
                         type="number"
                         value={tempTargets[field.key]}
-                        onChange={(e) =>
-                          setTempTargets({ ...tempTargets, [field.key]: Number(e.target.value) })
-                        }
+                        onChange={(e) => setTempTargets({ ...tempTargets, [field.key]: Number(e.target.value) })}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
                       />
                     </div>
@@ -1195,10 +1057,8 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB 2A: PIANO SETTIMANALE */}
             {nutritionSubTab === 'planner' && (
               <div className="space-y-5">
-                {/* Selettore Giorni + Copia Giorno */}
                 <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex gap-1.5 overflow-x-auto pb-1">
@@ -1221,7 +1081,6 @@ export default function App() {
                       })}
                     </div>
 
-                    {/* Copia giorno su un altro giorno */}
                     <div className="flex items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
                       <span className="text-xs text-slate-400 pl-2">Copia su:</span>
                       <select
@@ -1244,40 +1103,34 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Riepilogo Totale del Giorno Selezionato */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-800/80">
                     <div className="bg-slate-950 rounded-xl p-3 border border-slate-800/80">
                       <div className="text-xs text-slate-400">Calorie Totali</div>
                       <div className="text-lg font-bold text-emerald-400">
-                        {dayMacros.kcal}{' '}
-                        <span className="text-xs text-slate-500 font-normal">/ {data.targets.kcal}</span>
+                        {dayMacros.kcal} <span className="text-xs text-slate-500 font-normal">/ {data.targets.kcal}</span>
                       </div>
                     </div>
                     <div className="bg-slate-950 rounded-xl p-3 border border-slate-800/80">
                       <div className="text-xs text-slate-400">Proteine</div>
                       <div className="text-lg font-bold text-sky-400">
-                        {dayMacros.p}g{' '}
-                        <span className="text-xs text-slate-500 font-normal">/ {data.targets.p}g</span>
+                        {dayMacros.p}g <span className="text-xs text-slate-500 font-normal">/ {data.targets.p}g</span>
                       </div>
                     </div>
                     <div className="bg-slate-950 rounded-xl p-3 border border-slate-800/80">
                       <div className="text-xs text-slate-400">Carboidrati</div>
                       <div className="text-lg font-bold text-amber-400">
-                        {dayMacros.c}g{' '}
-                        <span className="text-xs text-slate-500 font-normal">/ {data.targets.c}g</span>
+                        {dayMacros.c}g <span className="text-xs text-slate-500 font-normal">/ {data.targets.c}g</span>
                       </div>
                     </div>
                     <div className="bg-slate-950 rounded-xl p-3 border border-slate-800/80">
                       <div className="text-xs text-slate-400">Grassi</div>
                       <div className="text-lg font-bold text-rose-400">
-                        {dayMacros.g}g{' '}
-                        <span className="text-xs text-slate-500 font-normal">/ {data.targets.g}g</span>
+                        {dayMacros.g}g <span className="text-xs text-slate-500 font-normal">/ {data.targets.g}g</span>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Slot Pasti del Giorno */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {MEAL_SLOTS.map((slot) => {
                     const assignedMealIds = data.weeklyPlan[selectedDay]?.[slot] || [];
@@ -1290,8 +1143,7 @@ export default function App() {
                           <div className="flex items-center justify-between mb-3">
                             <h4 className="font-semibold text-slate-100">{slot}</h4>
                             <span className="text-xs text-slate-500">
-                              {assignedMealIds.length}{' '}
-                              {assignedMealIds.length === 1 ? 'pasto' : 'pasti'}
+                              {assignedMealIds.length} {assignedMealIds.length === 1 ? 'pasto' : 'pasti'}
                             </span>
                           </div>
 
@@ -1311,13 +1163,9 @@ export default function App() {
                                     className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-start justify-between gap-2"
                                   >
                                     <div>
-                                      <div className="font-medium text-sm text-slate-100">
-                                        {meal.name}
-                                      </div>
+                                      <div className="font-medium text-sm text-slate-100">{meal.name}</div>
                                       <div className="text-[11px] text-slate-400 mt-1 flex flex-wrap gap-2">
-                                        <span className="text-emerald-400 font-semibold">
-                                          {Math.round(macros.kcal)} kcal
-                                        </span>
+                                        <span className="text-emerald-400 font-semibold">{Math.round(macros.kcal)} kcal</span>
                                         <span>• P: {Math.round(macros.p)}g</span>
                                         <span>• C: {Math.round(macros.c)}g</span>
                                         <span>• G: {Math.round(macros.g)}g</span>
@@ -1326,7 +1174,6 @@ export default function App() {
                                     <button
                                       onClick={() => removeMealFromSlot(selectedDay, slot, idx)}
                                       className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-slate-900 transition"
-                                      title="Rimuovi dal giorno"
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </button>
@@ -1337,7 +1184,6 @@ export default function App() {
                           )}
                         </div>
 
-                        {/* Selettore rapido per aggiungere un pasto salvato */}
                         <div className="pt-2 border-t border-slate-800/80 flex gap-2">
                           <select
                             defaultValue=""
@@ -1369,14 +1215,10 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB 2B: COMPOSITORE PASTI */}
             {nutritionSubTab === 'composer' && (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                {/* Form Creazione Pasto */}
                 <div className="lg:col-span-7 bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4">
-                  <h3 className="font-semibold text-base text-emerald-300">
-                    Componi un Nuovo Pasto Ricorrente
-                  </h3>
+                  <h3 className="font-semibold text-base text-emerald-300">Componi un Nuovo Pasto Ricorrente</h3>
                   <form onSubmit={handleSaveComposedMeal} className="space-y-4">
                     <div>
                       <label className="block text-xs text-slate-400 mb-1">Nome del Pasto</label>
@@ -1413,7 +1255,6 @@ export default function App() {
                             min="0.1"
                             value={selectedFoodQty}
                             onChange={(e) => setSelectedFoodQty(e.target.value)}
-                            title="Moltiplicatore porzione (es. 1 = porzione intera, 0.5 = mezza)"
                             className="w-20 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-white text-center"
                           />
                           <button
@@ -1425,17 +1266,11 @@ export default function App() {
                           </button>
                         </div>
                       </div>
-                      <p className="text-[11px] text-slate-500">
-                        Suggerimento: il numero a destra è il moltiplicatore della porzione (es. 1 = 100%, 1.5 = +50%).
-                      </p>
                     </div>
 
-                    {/* Lista ingredienti aggiunti */}
                     {mealItems.length > 0 && (
                       <div className="space-y-2">
-                        <div className="text-xs font-semibold text-slate-400">
-                          Ingredienti nel pasto:
-                        </div>
+                        <div className="text-xs font-semibold text-slate-400">Ingredienti nel pasto:</div>
                         {mealItems.map((it, idx) => {
                           const food = getFoodById(it.foodId);
                           if (!food) return null;
@@ -1453,9 +1288,7 @@ export default function App() {
                                 </span>
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    setMealItems((prev) => prev.filter((_, i) => i !== idx))
-                                  }
+                                  onClick={() => setMealItems((prev) => prev.filter((_, i) => i !== idx))}
                                   className="text-slate-500 hover:text-rose-400"
                                 >
                                   <X className="w-4 h-4" />
@@ -1465,7 +1298,6 @@ export default function App() {
                           );
                         })}
 
-                        {/* Totale anteprima pasto */}
                         {(() => {
                           const previewMacros = getMealMacros({ items: mealItems });
                           return (
@@ -1493,19 +1325,13 @@ export default function App() {
                   </form>
                 </div>
 
-                {/* Lista Pasti Salvati */}
                 <div className="lg:col-span-5 bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-3">
-                  <h3 className="font-semibold text-base text-slate-100">
-                    Pasti Già Pronti ({data.meals.length})
-                  </h3>
+                  <h3 className="font-semibold text-base text-slate-100">Pasti Già Pronti ({data.meals.length})</h3>
                   <div className="space-y-2.5 max-h-[520px] overflow-y-auto pr-1">
                     {data.meals.map((meal) => {
                       const m = getMealMacros(meal);
                       return (
-                        <div
-                          key={meal.id}
-                          className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2"
-                        >
+                        <div key={meal.id} className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2">
                           <div className="flex items-start justify-between">
                             <h4 className="font-semibold text-sm text-white">{meal.name}</h4>
                             <button
@@ -1544,18 +1370,13 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB 2C: DATABASE ALIMENTI SINGOLI */}
             {nutritionSubTab === 'foods' && (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
                 <div className="lg:col-span-5 bg-slate-900/80 border border-slate-800 rounded-2xl p-5 h-fit">
-                  <h3 className="font-semibold text-base text-emerald-300 mb-3">
-                    Aggiungi Alimento al Database
-                  </h3>
+                  <h3 className="font-semibold text-base text-emerald-300 mb-3">Aggiungi Alimento al Database</h3>
                   <form onSubmit={handleAddFood} className="space-y-3">
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">
-                        Nome Alimento &amp; Porzione
-                      </label>
+                      <label className="block text-xs text-slate-400 mb-1">Nome Alimento &amp; Porzione</label>
                       <input
                         type="text"
                         required
@@ -1624,9 +1445,7 @@ export default function App() {
                 </div>
 
                 <div className="lg:col-span-7 bg-slate-900/80 border border-slate-800 rounded-2xl p-5">
-                  <h3 className="font-semibold text-base text-slate-100 mb-3">
-                    Alimenti Salvati ({data.foods.length})
-                  </h3>
+                  <h3 className="font-semibold text-base text-slate-100 mb-3">Alimenti Salvati ({data.foods.length})</h3>
                   <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
                     {data.foods.map((food) => (
                       <div
@@ -1642,10 +1461,7 @@ export default function App() {
                             <span>G: {food.g}g</span>
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleDeleteFood(food.id)}
-                          className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg"
-                        >
+                        <button onClick={() => handleDeleteFood(food.id)} className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -1655,7 +1471,6 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB 2D: TRACKER PESO CORPOREO */}
             {nutritionSubTab === 'weight' && (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
                 <div className="lg:col-span-5 bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4 h-fit">
@@ -1734,11 +1549,8 @@ export default function App() {
 
                   {renderWeightChart(175)}
 
-                  {/* Storico Pesate */}
                   <div className="space-y-2 pt-2 border-t border-slate-800">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Storico Registrazioni
-                    </h4>
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Storico Registrazioni</h4>
                     {[...sortedWeights].reverse().map((w) => (
                       <div
                         key={w.id}
@@ -1751,10 +1563,7 @@ export default function App() {
                           </div>
                           {w.note && <p className="text-xs text-slate-400 mt-0.5">{w.note}</p>}
                         </div>
-                        <button
-                          onClick={() => handleDeleteWeight(w.id)}
-                          className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg"
-                        >
+                        <button onClick={() => handleDeleteWeight(w.id)} className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -1766,12 +1575,8 @@ export default function App() {
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* 3. SEZIONE ALLENAMENTO (3x SETTIMANA + TIMER)             */}
-        {/* ========================================================= */}
         {activeTab === 'workout' && (
           <div className="space-y-5">
-            {/* Selettore Scheda (Giorno A / B / C) + Switch Live/Modifica */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap gap-2">
@@ -1805,7 +1610,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Intestazione Scheda Attiva + Barra Avanzamento Serie */}
               {currentWorkout && (
                 <div className="pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
@@ -1835,7 +1639,6 @@ export default function App() {
               )}
             </div>
 
-            {/* Elenco Esercizi */}
             {currentWorkout && (
               <div className="space-y-3.5">
                 {currentWorkout.exercises.map((ex, exIdx) => (
@@ -1860,12 +1663,9 @@ export default function App() {
                             <Clock className="w-3.5 h-3.5" /> Recupero: {ex.rest}s
                           </span>
                         </div>
-                        {ex.notes && (
-                          <p className="text-xs text-slate-500 italic mt-1">Nota: {ex.notes}</p>
-                        )}
+                        {ex.notes && <p className="text-xs text-slate-500 italic mt-1">Nota: {ex.notes}</p>}
                       </div>
 
-                      {/* Regolazione Carico Manubri (kg) o Elimina in modalità edit */}
                       <div className="flex items-center gap-2">
                         {ex.weight > 0 || workoutMode === 'edit' ? (
                           <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-1">
@@ -1902,7 +1702,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Pulsanti Spunta Serie (grandi per uso con una mano in palestra) */}
                     {workoutMode === 'live' && (
                       <div className="flex flex-wrap items-center gap-2 pt-1">
                         {Array.from({ length: ex.sets }).map((_, setIdx) => {
@@ -1917,11 +1716,7 @@ export default function App() {
                                   : 'bg-slate-950 hover:bg-slate-800 border-slate-800 text-slate-300'
                               }`}
                             >
-                              {isDone ? (
-                                <CheckCircle2 className="w-4 h-4" />
-                              ) : (
-                                <Circle className="w-4 h-4 text-slate-500" />
-                              )}
+                              {isDone ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4 text-slate-500" />}
                               Serie {setIdx + 1}
                             </button>
                           );
@@ -1929,7 +1724,6 @@ export default function App() {
 
                         <button
                           onClick={() => startTimer(ex.rest || 90)}
-                          title="Avvia subito il recupero di questo esercizio"
                           className="py-3 px-3 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 text-xs font-semibold flex items-center gap-1"
                         >
                           <Clock className="w-3.5 h-3.5" /> {ex.rest}s
@@ -1939,15 +1733,12 @@ export default function App() {
                   </div>
                 ))}
 
-                {/* Form Aggiungi Nuovo Esercizio (in modalità Modifica Scheda) */}
                 {workoutMode === 'edit' && (
                   <form
                     onSubmit={handleAddExercise}
                     className="bg-slate-900 border border-indigo-500/40 rounded-2xl p-5 space-y-3"
                   >
-                    <h4 className="font-semibold text-sm text-indigo-300">
-                      + Aggiungi Esercizio a {currentWorkout.dayLabel}
-                    </h4>
+                    <h4 className="font-semibold text-sm text-indigo-300">+ Aggiungi Esercizio a {currentWorkout.dayLabel}</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <input
                         type="text"
@@ -1986,9 +1777,7 @@ export default function App() {
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] text-slate-400 mb-1">
-                          Carico kg (0 = BW)
-                        </label>
+                        <label className="block text-[11px] text-slate-400 mb-1">Carico kg (0 = BW)</label>
                         <input
                           type="number"
                           step="0.5"
@@ -2010,10 +1799,7 @@ export default function App() {
                         />
                       </div>
                     </div>
-                    <button
-                      type="submit"
-                      className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold"
-                    >
+                    <button type="submit" className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">
                       Aggiungi Esercizio
                     </button>
                   </form>
@@ -2024,12 +1810,8 @@ export default function App() {
         )}
       </main>
 
-      {/* ========================================================= */}
-      {/* BARRA FLOATING TIMER DI RECUPERO (SEMPRE ACCESSIBILE)      */}
-      {/* ========================================================= */}
       <div className="fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 shadow-2xl">
         <div className="max-w-5xl mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
-          {/* Display Tempo & Controlli Play/Pausa */}
           <div className="flex items-center gap-3">
             <div
               className={`px-3.5 py-1.5 rounded-xl font-mono text-xl font-bold border transition ${
@@ -2051,7 +1833,6 @@ export default function App() {
                   setTimerRunning(!timerRunning);
                 }}
                 className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition"
-                title={timerRunning ? 'Pausa' : 'Avvia'}
               >
                 {timerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
               </button>
@@ -2063,7 +1844,6 @@ export default function App() {
                   setTimerSeconds(timerInitial);
                 }}
                 className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-                title="Reset Timer"
               >
                 <RotateCcw className="w-4 h-4" />
               </button>
@@ -2071,18 +1851,12 @@ export default function App() {
               <button
                 onClick={() => setSoundEnabled(!soundEnabled)}
                 className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-                title={soundEnabled ? 'Audio attivo' : 'Audio disattivato'}
               >
-                {soundEnabled ? (
-                  <Volume2 className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <VolumeX className="w-4 h-4 text-slate-500" />
-                )}
+                {soundEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
               </button>
             </div>
           </div>
 
-          {/* Preset Rapidi Recupero */}
           <div className="flex items-center gap-1.5 overflow-x-auto">
             {[60, 90, 120].map((sec) => (
               <button
