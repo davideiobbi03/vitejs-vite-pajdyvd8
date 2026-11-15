@@ -32,6 +32,8 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  Palette,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://qwxfjrunqhssoonapfcl.supabase.co';
@@ -51,6 +53,53 @@ const FULL_DAYS = {
 };
 
 const MEAL_SLOTS = ['Colazione', 'Pranzo', 'Cena', 'Spuntini'];
+
+const PRESET_BACKGROUNDS = [
+  {
+    id: 'aurora-emerald',
+    name: 'Aurora Smeraldo',
+    css: 'radial-gradient(circle at 15% 15%, rgba(16, 185, 129, 0.25), transparent 45%), radial-gradient(circle at 85% 80%, rgba(99, 102, 241, 0.22), transparent 50%), linear-gradient(135deg, #020617 0%, #0f172a 100%)',
+    preview: 'linear-gradient(135deg, #064e3b, #0f172a, #312e81)',
+  },
+  {
+    id: 'deep-abyss',
+    name: 'Notte Profonda',
+    css: 'radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.18), transparent 55%), linear-gradient(180deg, #030712 0%, #090d16 100%)',
+    preview: 'linear-gradient(180deg, #0c4a6e, #030712)',
+  },
+  {
+    id: 'sunset-power',
+    name: 'Tramonto Energia',
+    css: 'radial-gradient(circle at 80% 10%, rgba(244, 63, 94, 0.22), transparent 45%), radial-gradient(circle at 15% 85%, rgba(245, 158, 11, 0.18), transparent 50%), linear-gradient(135deg, #090d16 0%, #1e1b2e 100%)',
+    preview: 'linear-gradient(135deg, #881337, #1e1b2e, #78350f)',
+  },
+  {
+    id: 'steel-cobalt',
+    name: 'Acciaio & Cobalto',
+    css: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
+    preview: 'linear-gradient(135deg, #0f172a, #334155)',
+  },
+  {
+    id: 'sand-light',
+    name: 'Sabbia & Luce',
+    css: 'radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.12), transparent 50%), linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+    preview: 'linear-gradient(135deg, #f8fafc, #cbd5e1)',
+  },
+  {
+    id: 'nordic-mist',
+    name: 'Nebbia Nordica',
+    css: 'radial-gradient(circle at 85% 15%, rgba(99, 102, 241, 0.14), transparent 50%), linear-gradient(135deg, #eef2ff 0%, #f1f5f9 100%)',
+    preview: 'linear-gradient(135deg, #e0e7ff, #f1f5f9)',
+  },
+];
+
+const INITIAL_BACKGROUND = {
+  type: 'default', // 'default' | 'preset' | 'color' | 'image'
+  presetId: 'aurora-emerald',
+  color: '#0b132b',
+  imageUrl: '',
+  overlayOpacity: 0.55,
+};
 
 const INITIAL_FOODS = [
   { id: 'f1', name: 'Yogurt Greco 0% (250g)', kcal: 145, p: 25, c: 9, g: 0 },
@@ -186,6 +235,7 @@ const STORAGE_KEY = 'fittrack_pro_data_v1';
 function normalizeData(raw) {
   const safe = raw && typeof raw === 'object' ? raw : {};
   const layout = safe.layout && typeof safe.layout === 'object' ? safe.layout : {};
+  const bg = safe.background && typeof safe.background === 'object' ? safe.background : {};
   return {
     foods: Array.isArray(safe.foods) ? safe.foods : INITIAL_FOODS,
     meals: Array.isArray(safe.meals) ? safe.meals : INITIAL_MEALS,
@@ -194,6 +244,13 @@ function normalizeData(raw) {
     workouts: Array.isArray(safe.workouts) && safe.workouts.length > 0 ? safe.workouts : INITIAL_WORKOUTS,
     targets: safe.targets && typeof safe.targets === 'object' ? { ...INITIAL_TARGETS, ...safe.targets } : INITIAL_TARGETS,
     theme: safe.theme === 'light' ? 'light' : 'dark',
+    background: {
+      type: ['default', 'preset', 'color', 'image'].includes(bg.type) ? bg.type : INITIAL_BACKGROUND.type,
+      presetId: typeof bg.presetId === 'string' ? bg.presetId : INITIAL_BACKGROUND.presetId,
+      color: typeof bg.color === 'string' ? bg.color : INITIAL_BACKGROUND.color,
+      imageUrl: typeof bg.imageUrl === 'string' ? bg.imageUrl : INITIAL_BACKGROUND.imageUrl,
+      overlayOpacity: typeof bg.overlayOpacity === 'number' ? bg.overlayOpacity : INITIAL_BACKGROUND.overlayOpacity,
+    },
     layout: {
       dashboard: Array.isArray(layout.dashboard) ? layout.dashboard : INITIAL_LAYOUT.dashboard,
       nutrition: Array.isArray(layout.nutrition) ? layout.nutrition : INITIAL_LAYOUT.nutrition,
@@ -238,12 +295,58 @@ export default function App() {
 
   const isLight = data.theme === 'light';
   const [reorderMode, setReorderMode] = useState(false);
+  const [bgModalOpen, setBgModalOpen] = useState(false);
+  const [customImageInput, setCustomImageInput] = useState('');
+  const bgFileInputRef = useRef(null);
 
   const toggleTheme = () => {
     setData((prev) => ({
       ...prev,
       theme: prev.theme === 'light' ? 'dark' : 'light',
     }));
+  };
+
+  const updateBackground = (patch) => {
+    setData((prev) => ({
+      ...prev,
+      background: {
+        ...prev.background,
+        ...patch,
+      },
+    }));
+  };
+
+  // Ridimensiona e ottimizza foto caricata per sync veloce su Supabase
+  const handleBackgroundImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 1440;
+        let w = img.width;
+        let h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.72);
+        updateBackground({ type: 'image', imageUrl: compressedDataUrl });
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
   };
 
   const moveSection = (groupKey, sectionId, direction) => {
@@ -668,6 +771,7 @@ export default function App() {
         workouts: INITIAL_WORKOUTS,
         targets: INITIAL_TARGETS,
         theme: prev.theme,
+        background: prev.background,
         layout: INITIAL_LAYOUT,
       })
     );
@@ -705,20 +809,54 @@ export default function App() {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // Classi dinamiche Tema Chiaro / Scuro
+  // --- CALCOLO STILE SFONDO PERSONALIZZATO ---
+  const getWrapperBackgroundStyle = () => {
+    const bg = data.background || INITIAL_BACKGROUND;
+    if (bg.type === 'preset') {
+      const found = PRESET_BACKGROUNDS.find((p) => p.id === bg.presetId) || PRESET_BACKGROUNDS[0];
+      return { background: found.css, backgroundAttachment: 'fixed' };
+    }
+    if (bg.type === 'color') {
+      return { backgroundColor: bg.color || '#0b132b' };
+    }
+    if (bg.type === 'image' && bg.imageUrl) {
+      const op = typeof bg.overlayOpacity === 'number' ? bg.overlayOpacity : 0.55;
+      const overlayColor = isLight ? `rgba(248, 250, 252, ${op})` : `rgba(2, 6, 23, ${op})`;
+      return {
+        backgroundImage: `linear-gradient(${overlayColor}, ${overlayColor}), url("${bg.imageUrl}")`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
+      };
+    }
+    return {};
+  };
+
+  const hasCustomBg = data.background?.type && data.background.type !== 'default';
+
+  // Classi dinamiche Tema Chiaro / Scuro con supporto trasparenza su sfondi personalizzati
   const cCard = isLight
-    ? 'bg-white border-slate-200 shadow-sm'
+    ? hasCustomBg
+      ? 'bg-white/88 backdrop-blur-md border-slate-200/90 shadow-sm'
+      : 'bg-white border-slate-200 shadow-sm'
+    : hasCustomBg
+    ? 'bg-slate-900/82 backdrop-blur-md border-slate-800/90 shadow-lg'
     : 'bg-slate-900/80 border-slate-800';
+
   const cInner = isLight
-    ? 'bg-slate-50 border-slate-200/90'
+    ? hasCustomBg
+      ? 'bg-slate-50/85 border-slate-200/90'
+      : 'bg-slate-50 border-slate-200/90'
+    : hasCustomBg
+    ? 'bg-slate-950/75 border-slate-800/90'
     : 'bg-slate-950/90 border-slate-800';
+
   const cInput = isLight
     ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400'
     : 'bg-slate-950 border-slate-800 text-white placeholder:text-slate-500';
   const cTextPrimary = isLight ? 'text-slate-900' : 'text-slate-100';
   const cTextSecondary = isLight ? 'text-slate-500' : 'text-slate-400';
 
-  // Wrapper riordinabile per le sezioni
   const renderReorderWrapper = (groupKey, sectionId, label, children, extraClass = '') => {
     const list = data.layout?.[groupKey] || INITIAL_LAYOUT[groupKey];
     const index = list.indexOf(sectionId);
@@ -731,8 +869,8 @@ export default function App() {
         className={`relative transition-all ${extraClass} ${
           reorderMode
             ? isLight
-              ? 'ring-2 ring-amber-400/80 rounded-2xl p-1.5 bg-amber-50/40'
-              : 'ring-2 ring-amber-500/50 rounded-2xl p-1.5 bg-amber-500/5'
+              ? 'ring-2 ring-amber-400/80 rounded-2xl p-1.5 bg-amber-50/60 backdrop-blur-sm'
+              : 'ring-2 ring-amber-500/50 rounded-2xl p-1.5 bg-amber-500/10 backdrop-blur-sm'
             : ''
         }`}
       >
@@ -817,10 +955,10 @@ export default function App() {
       points[points.length - 1].x
     },${height - padY}`;
 
-    const gridColor = isLight ? '#e2e8f0' : '#1e293b';
+    const gridColor = isLight ? '#cbd5e1' : '#1e293b';
     const dotFill = isLight ? '#ffffff' : '#090d16';
     const labelColor = isLight ? '#0f172a' : '#e2e8f0';
-    const dateColor = isLight ? '#64748b' : '#64748b';
+    const dateColor = isLight ? '#64748b' : '#94a3b8';
 
     return (
       <div className="w-full overflow-hidden">
@@ -981,8 +1119,8 @@ export default function App() {
               <span
                 className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                   Number(weightDeltaTotal) <= 0
-                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'
-                    : 'bg-amber-500/15 text-amber-600 dark:text-amber-300'
+                    ? 'bg-emerald-500/15 text-emerald-500'
+                    : 'bg-amber-500/15 text-amber-500'
                 }`}
               >
                 {Number(weightDeltaTotal) > 0 ? `+${weightDeltaTotal}` : weightDeltaTotal} kg tot
@@ -1066,7 +1204,7 @@ export default function App() {
                   className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex flex-col items-center min-w-[58px] border transition ${
                     selectedDay === d
                       ? 'bg-emerald-500/15 border-emerald-500 text-emerald-500'
-                      : `${cInner} ${cTextSecondary} hover:${cTextPrimary}`
+                      : `${cInner} ${cTextSecondary}`
                   }`}
                 >
                   <span>{d}</span>
@@ -1091,7 +1229,7 @@ export default function App() {
             </select>
             <button
               onClick={handleCopyDayPlan}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-600 dark:text-emerald-300 text-xs font-semibold transition"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-500 text-xs font-semibold transition"
             >
               <Copy className="w-3.5 h-3.5" /> Copia
             </button>
@@ -1263,7 +1401,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleAddIngredientToComposer}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-600 dark:text-emerald-300 text-xs font-semibold flex items-center gap-1"
+                  className="px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-500 text-xs font-semibold flex items-center gap-1"
                 >
                   <Plus className="w-4 h-4" /> Aggiungi
                 </button>
@@ -1613,7 +1751,7 @@ export default function App() {
                 className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition border ${
                   activeWorkoutId === wo.id
                     ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/20'
-                    : `${cInner} ${cTextSecondary} hover:${cTextPrimary}`
+                    : `${cInner} ${cTextSecondary}`
                 }`}
               >
                 {wo.dayLabel}: {wo.title.split('(')[0].trim()}
@@ -1626,7 +1764,7 @@ export default function App() {
               onClick={() => setWorkoutMode(workoutMode === 'live' ? 'edit' : 'live')}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition ${
                 workoutMode === 'edit'
-                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-600 dark:text-amber-300'
+                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-500'
                   : `${cInner} ${cTextPrimary}`
               }`}
             >
@@ -1702,7 +1840,7 @@ export default function App() {
                     <div className={`flex items-center ${cInner} border rounded-xl p-1`}>
                       <button
                         onClick={() => updateExerciseWeight(currentWorkout.id, ex.id, -1)}
-                        className={`w-7 h-7 flex items-center justify-center ${cTextSecondary} hover:${cTextPrimary} font-bold`}
+                        className={`w-7 h-7 flex items-center justify-center ${cTextSecondary} font-bold`}
                       >
                         -
                       </button>
@@ -1711,7 +1849,7 @@ export default function App() {
                       </span>
                       <button
                         onClick={() => updateExerciseWeight(currentWorkout.id, ex.id, +1)}
-                        className={`w-7 h-7 flex items-center justify-center ${cTextSecondary} hover:${cTextPrimary} font-bold`}
+                        className={`w-7 h-7 flex items-center justify-center ${cTextSecondary} font-bold`}
                       >
                         +
                       </button>
@@ -1842,16 +1980,17 @@ export default function App() {
 
   return (
     <div
+      style={getWrapperBackgroundStyle()}
       className={`min-h-screen font-sans selection:bg-emerald-500/30 pb-28 transition-colors duration-200 ${
-        isLight ? 'bg-slate-100 text-slate-900' : 'bg-slate-950 text-slate-100'
-      }`}
+        !hasCustomBg ? (isLight ? 'bg-slate-100' : 'bg-slate-950') : ''
+      } ${isLight ? 'text-slate-900' : 'text-slate-100'}`}
     >
       {/* HEADER */}
       <header
         className={`sticky top-0 z-30 backdrop-blur-md border-b transition-colors ${
           isLight
-            ? 'bg-white/90 border-slate-200'
-            : 'bg-slate-950/90 border-slate-800/80'
+            ? 'bg-white/88 border-slate-200'
+            : 'bg-slate-950/88 border-slate-800/80'
         }`}
       >
         <div className="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
@@ -1870,6 +2009,29 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Personalizza Sfondo */}
+            <button
+              onClick={() => {
+                setCustomImageInput(
+                  data.background?.type === 'image' && data.background.imageUrl.startsWith('http')
+                    ? data.background.imageUrl
+                    : ''
+                );
+                setBgModalOpen((v) => !v);
+              }}
+              title="Personalizza sfondo"
+              className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition ${
+                bgModalOpen || hasCustomBg
+                  ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-500 font-semibold'
+                  : isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
+                  : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
+              }`}
+            >
+              <Palette className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Sfondo</span>
+            </button>
+
             {/* Switch Tema Chiaro / Scuro */}
             <button
               onClick={toggleTheme}
@@ -1885,7 +2047,7 @@ export default function App() {
               ) : (
                 <Sun className="w-3.5 h-3.5 text-amber-400" />
               )}
-              <span className="hidden md:inline font-medium">{isLight ? 'Scura' : 'Chiara'}</span>
+              <span className="hidden lg:inline font-medium">{isLight ? 'Scura' : 'Chiara'}</span>
             </button>
 
             {/* Modalità Riordina Sezioni */}
@@ -1918,16 +2080,16 @@ export default function App() {
               }
               className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition ${
                 syncStatus === 'synced'
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-300 hover:bg-emerald-500/20'
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20'
                   : syncStatus === 'syncing'
-                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-300'
-                  : 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-300 hover:bg-rose-500/20'
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-500'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-500 hover:bg-rose-500/20'
               }`}
             >
               {syncStatus === 'synced' && <Cloud className="w-3.5 h-3.5" />}
               {syncStatus === 'syncing' && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
               {syncStatus === 'error' && <CloudOff className="w-3.5 h-3.5" />}
-              <span className="hidden lg:inline font-medium">
+              <span className="hidden xl:inline font-medium">
                 {syncStatus === 'synced' ? 'Cloud Sync' : syncStatus === 'syncing' ? 'Sync...' : 'Offline'}
               </span>
             </button>
@@ -1942,7 +2104,6 @@ export default function App() {
               }`}
             >
               <Download className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="hidden xl:inline">Esporta</span>
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -1954,7 +2115,6 @@ export default function App() {
               }`}
             >
               <Upload className="w-3.5 h-3.5 text-indigo-500" />
-              <span className="hidden xl:inline">Importa</span>
             </button>
             <input ref={fileInputRef} type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
             <button
@@ -1991,7 +2151,7 @@ export default function App() {
             onClick={() => setActiveTab('nutrition')}
             className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${
               activeTab === 'nutrition'
-                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40'
+                ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/40'
                 : `${cTextSecondary} hover:${cTextPrimary}`
             }`}
           >
@@ -2003,7 +2163,7 @@ export default function App() {
             onClick={() => setActiveTab('workout')}
             className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition ${
               activeTab === 'workout'
-                ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border border-indigo-500/40'
+                ? 'bg-indigo-500/15 text-indigo-500 border border-indigo-500/40'
                 : `${cTextSecondary} hover:${cTextPrimary}`
             }`}
           >
@@ -2013,14 +2173,161 @@ export default function App() {
         </nav>
       </header>
 
+      {/* PANNELLO PERSONALIZZAZIONE SFONDO */}
+      {bgModalOpen && (
+        <div className="max-w-5xl mx-auto px-4 pt-4">
+          <div className={`${cCard} border border-indigo-500/40 rounded-2xl p-5 space-y-4 shadow-xl`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Palette className="w-4 h-4 text-indigo-500" />
+                <h3 className={`font-semibold text-sm ${cTextPrimary}`}>Personalizza Sfondo dell&apos;App</h3>
+              </div>
+              <button onClick={() => setBgModalOpen(false)} className={cTextSecondary}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 1. Predefinito & Gradienti */}
+            <div className="space-y-2">
+              <div className={`text-xs font-semibold ${cTextSecondary}`}>Sfondi Sfumati &amp; Predefinito</div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => updateBackground({ type: 'default' })}
+                  className={`p-2 rounded-xl border text-left transition flex flex-col gap-1.5 ${
+                    data.background.type === 'default'
+                      ? 'border-indigo-500 ring-2 ring-indigo-500/30'
+                      : `${cInner} border`
+                  }`}
+                >
+                  <div
+                    className={`w-full h-9 rounded-lg border ${
+                      isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-950 border-slate-800'
+                    }`}
+                  />
+                  <span className={`text-[11px] font-medium truncate ${cTextPrimary}`}>Default</span>
+                </button>
+
+                {PRESET_BACKGROUNDS.map((preset) => {
+                  const selected = data.background.type === 'preset' && data.background.presetId === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => updateBackground({ type: 'preset', presetId: preset.id })}
+                      className={`p-2 rounded-xl border text-left transition flex flex-col gap-1.5 ${
+                        selected
+                          ? 'border-indigo-500 ring-2 ring-indigo-500/30'
+                          : `${cInner} border`
+                      }`}
+                    >
+                      <div
+                        className="w-full h-9 rounded-lg border border-white/10"
+                        style={{ background: preset.preview }}
+                      />
+                      <span className={`text-[11px] font-medium truncate ${cTextPrimary}`}>{preset.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 2. Colore Tinta Unita + Immagine Personalizzata */}
+            <div className={`grid grid-cols-1 md:grid-cols-12 gap-4 pt-3 border-t ${isLight ? 'border-slate-200' : 'border-slate-800'}`}>
+              {/* Colore Solido */}
+              <div className="md:col-span-4 space-y-2">
+                <div className={`text-xs font-semibold ${cTextSecondary}`}>Colore Tinta Unita</div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={data.background.color || '#0b132b'}
+                    onChange={(e) => updateBackground({ type: 'color', color: e.target.value })}
+                    className="w-10 h-10 rounded-xl cursor-pointer border-0 bg-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => updateBackground({ type: 'color' })}
+                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold border transition ${
+                      data.background.type === 'color'
+                        ? 'bg-indigo-600 border-indigo-500 text-white'
+                        : `${cInner} ${cTextPrimary}`
+                    }`}
+                  >
+                    Applica Colore ({data.background.color})
+                  </button>
+                </div>
+              </div>
+
+              {/* Immagine / Foto Personalizzata */}
+              <div className="md:col-span-8 space-y-2">
+                <div className={`text-xs font-semibold ${cTextSecondary}`}>Foto o Immagine Personalizzata</div>
+                <div className="flex flex-wrap sm:flex-nowrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => bgFileInputRef.current?.click()}
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold border flex items-center gap-1.5 whitespace-nowrap transition ${cInner} ${cTextPrimary} hover:border-indigo-500`}
+                  >
+                    <ImageIcon className="w-3.5 h-3.5 text-indigo-500" />
+                    Carica Foto
+                  </button>
+                  <input
+                    ref={bgFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleBackgroundImageUpload}
+                    className="hidden"
+                  />
+
+                  <input
+                    type="url"
+                    placeholder="Oppure incolla URL immagine (https://...)"
+                    value={customImageInput}
+                    onChange={(e) => setCustomImageInput(e.target.value)}
+                    className={`flex-1 ${cInput} border rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (customImageInput.trim()) {
+                        updateBackground({ type: 'image', imageUrl: customImageInput.trim() });
+                      }
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
+                  >
+                    Usa URL
+                  </button>
+                </div>
+
+                {data.background.type === 'image' && data.background.imageUrl && (
+                  <div className="flex items-center gap-3 pt-1">
+                    <span className={`text-[11px] ${cTextSecondary} whitespace-nowrap`}>
+                      Contrasto lettura ({Math.round((data.background.overlayOpacity ?? 0.55) * 100)}%):
+                    </span>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="0.9"
+                      step="0.05"
+                      value={data.background.overlayOpacity ?? 0.55}
+                      onChange={(e) => updateBackground({ overlayOpacity: parseFloat(e.target.value) })}
+                      className="flex-1 accent-indigo-500"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* BANNER INFORMATIVO MODALITÀ RIORDINO */}
       {reorderMode && (
         <div className="max-w-5xl mx-auto px-4 pt-4">
           <div
             className={`rounded-2xl px-4 py-3 border flex flex-wrap items-center justify-between gap-2 text-xs ${
               isLight
-                ? 'bg-amber-50 border-amber-300 text-amber-900'
-                : 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+                ? 'bg-amber-50/95 border-amber-300 text-amber-900'
+                : 'bg-amber-500/15 backdrop-blur-md border-amber-500/30 text-amber-200'
             }`}
           >
             <span>
@@ -2046,14 +2353,12 @@ export default function App() {
 
       {/* MAIN CONTENT */}
       <main className="max-w-5xl mx-auto px-4 pt-6 space-y-6">
-        {/* 1. DASHBOARD */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
             {data.layout.dashboard.map((secId) => dashboardSections[secId] || null)}
           </div>
         )}
 
-        {/* 2. ALIMENTAZIONE & PESO */}
         {activeTab === 'nutrition' && (
           <div className="space-y-5">
             {data.layout.nutrition.map((secId) => {
@@ -2079,7 +2384,7 @@ export default function App() {
                               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition ${
                                 nutritionSubTab === tab.id
                                   ? 'bg-emerald-500 text-white font-semibold'
-                                  : `${cTextSecondary} hover:${cTextPrimary}`
+                                  : `${cTextSecondary}`
                               }`}
                             >
                               <Icon className="w-4 h-4" />
@@ -2182,7 +2487,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 3. ALLENAMENTO */}
         {activeTab === 'workout' && (
           <div className="space-y-5">
             {data.layout.workout.map((wId) => workoutSections[wId] || null)}
@@ -2194,8 +2498,8 @@ export default function App() {
       <div
         className={`fixed bottom-0 inset-x-0 z-40 backdrop-blur-lg border-t shadow-2xl transition-colors ${
           isLight
-            ? 'bg-white/95 border-slate-200'
-            : 'bg-slate-900/95 border-slate-800'
+            ? 'bg-white/92 border-slate-200'
+            : 'bg-slate-900/92 border-slate-800'
         }`}
       >
         <div className="max-w-5xl mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
