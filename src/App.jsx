@@ -276,6 +276,18 @@ function getTodayIso() {
   return new Date().toISOString().split('T')[0];
 }
 
+// Estrae i grammi di riferimento dal nome dell'alimento (es. "Pasta (120g)" -> 120)
+function extractBaseGrams(food) {
+  if (!food) return null;
+  if (typeof food.baseGrams === 'number' && food.baseGrams > 0) return food.baseGrams;
+  const match = String(food.name || '').match(/\((\d+(?:[.,]\d+)?)\s*(?:g|gr|ml)\)/i);
+  if (match) {
+    const val = parseFloat(match[1].replace(',', '.'));
+    return !isNaN(val) && val > 0 ? val : null;
+  }
+  return null;
+}
+
 function normalizeData(raw) {
   const safe = raw && typeof raw === 'object' ? raw : {};
   const layout = safe.layout && typeof safe.layout === 'object' ? safe.layout : {};
@@ -619,11 +631,13 @@ export default function App() {
     };
   };
 
-  const [newFood, setNewFood] = useState({ name: '', kcal: '', p: '', c: '', g: '' });
+  const [newFood, setNewFood] = useState({ name: '', baseGrams: '100', kcal: '', p: '', c: '', g: '' });
   const [mealName, setMealName] = useState('');
   const [mealItems, setMealItems] = useState([]);
   const [selectedFoodToAdd, setSelectedFoodToAdd] = useState('');
+  const [qtyInputMode, setQtyInputMode] = useState('portion'); // 'portion' | 'grams'
   const [selectedFoodQty, setSelectedFoodQty] = useState('1');
+  const [selectedFoodGrams, setSelectedFoodGrams] = useState('100');
   const [newWeight, setNewWeight] = useState('');
   const [newWeightDate, setNewWeightDate] = useState(() => getTodayIso());
   const [newWeightNote, setNewWeightNote] = useState('');
@@ -641,19 +655,40 @@ export default function App() {
 
   const fileInputRef = useRef(null);
 
+  const handleSelectFoodInComposer = (newFoodId) => {
+    setSelectedFoodToAdd(newFoodId);
+    const f = getFoodById(newFoodId);
+    const bg = extractBaseGrams(f);
+    if (bg) {
+      setSelectedFoodGrams(String(bg));
+    } else {
+      setQtyInputMode('portion');
+      setSelectedFoodQty('1');
+    }
+  };
+
   const handleAddFood = (e) => {
     e.preventDefault();
     if (!newFood.name.trim()) return;
+    const rawName = newFood.name.trim();
+    const parsedBaseG = parseFloat(newFood.baseGrams);
+    const hasGramsInName = /\(\d+(?:[.,]\d+)?\s*(?:g|gr|ml)\)/i.test(rawName);
+    const formattedName =
+      !hasGramsInName && !isNaN(parsedBaseG) && parsedBaseG > 0
+        ? `${rawName} (${parsedBaseG}g)`
+        : rawName;
+
     const created = {
       id: 'f-' + Date.now(),
-      name: newFood.name.trim(),
+      name: formattedName,
+      baseGrams: !isNaN(parsedBaseG) && parsedBaseG > 0 ? parsedBaseG : undefined,
       kcal: Number(newFood.kcal) || 0,
       p: Number(newFood.p) || 0,
       c: Number(newFood.c) || 0,
       g: Number(newFood.g) || 0,
     };
     setData((prev) => ({ ...prev, foods: [created, ...prev.foods] }));
-    setNewFood({ name: '', kcal: '', p: '', c: '', g: '' });
+    setNewFood({ name: '', baseGrams: '100', kcal: '', p: '', c: '', g: '' });
   };
 
   const handleDeleteFood = (id) => {
@@ -666,9 +701,31 @@ export default function App() {
   const handleAddIngredientToComposer = () => {
     const fId = selectedFoodToAdd || (data.foods[0] && data.foods[0].id);
     if (!fId) return;
-    const qty = parseFloat(selectedFoodQty) || 1;
-    setMealItems((prev) => [...prev, { foodId: fId, qty }]);
+    const food = getFoodById(fId);
+    const baseG = extractBaseGrams(food);
+
+    let finalQty = 1;
+    if (qtyInputMode === 'grams' && baseG) {
+      const gVal = parseFloat(String(selectedFoodGrams).replace(',', '.'));
+      if (isNaN(gVal) || gVal <= 0) return;
+      finalQty = Number((gVal / baseG).toFixed(3));
+    } else {
+      const pVal = parseFloat(String(selectedFoodQty).replace(',', '.'));
+      if (isNaN(pVal) || pVal <= 0) return;
+      finalQty = Number(pVal.toFixed(3));
+    }
+
+    setMealItems((prev) => [...prev, { foodId: fId, qty: finalQty }]);
     setSelectedFoodQty('1');
+    if (baseG) setSelectedFoodGrams(String(baseG));
+  };
+
+  const handleUpdateMealItemQty = (index, nextQty) => {
+    const parsed = parseFloat(String(nextQty).replace(',', '.'));
+    if (isNaN(parsed) || parsed <= 0) return;
+    setMealItems((prev) =>
+      prev.map((item, idx) => (idx === index ? { ...item, qty: Number(parsed.toFixed(3)) } : item))
+    );
   };
 
   const handleSaveComposedMeal = (e) => {
@@ -818,7 +875,6 @@ export default function App() {
     const nextCompleted = { ...completedSets, [key]: nextState };
     setCompletedSets(nextCompleted);
 
-    // Se l'utente completa almeno una serie oggi, attiva automaticamente il giorno workout nell'idratazione
     if (nextState) {
       const today = getTodayIso();
       setData((prev) => {
@@ -964,7 +1020,7 @@ export default function App() {
         ...prev,
         foods: [],
       }));
-      setNewFood({ name: '', kcal: '', p: '', c: '', g: '' });
+      setNewFood({ name: '', baseGrams: '100', kcal: '', p: '', c: '', g: '' });
     } else if (nutritionSubTab === 'water') {
       if (!window.confirm(`Vuoi azzerare a 0 tutte le bevute registrate per il ${selectedWaterDate}?`)) return;
       setData((prev) => ({
@@ -1783,6 +1839,17 @@ export default function App() {
     ),
   };
 
+  // Calcolo anteprima ingrediente selezionato nel compositore
+  const activeComposerFoodId = selectedFoodToAdd || (data.foods[0]?.id ?? '');
+  const activeComposerFood = getFoodById(activeComposerFoodId);
+  const activeComposerBaseGrams = extractBaseGrams(activeComposerFood);
+  const effectiveQtyMode = qtyInputMode === 'grams' && activeComposerBaseGrams ? 'grams' : 'portion';
+  const computedPreviewMultiplier = activeComposerFood
+    ? effectiveQtyMode === 'grams' && activeComposerBaseGrams
+      ? (parseFloat(String(selectedFoodGrams).replace(',', '.')) || 0) / activeComposerBaseGrams
+      : parseFloat(String(selectedFoodQty).replace(',', '.')) || 0
+    : 0;
+
   const composerSections = {
     composerForm: renderReorderWrapper(
       'composer',
@@ -1804,14 +1871,54 @@ export default function App() {
           </div>
 
           <div className={`${cInner} border rounded-xl p-3.5 space-y-3`}>
-            <label className={`block text-xs font-medium ${cTextPrimary}`}>
-              Aggiungi Ingredienti dal Database Alimenti
-            </label>
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className={`block text-xs font-medium ${cTextPrimary}`}>
+                1. Scegli Alimento &amp; 2. Imposta Quantità
+              </label>
+
+              {/* Selettore unità Porzioni vs Grammi */}
+              <div className={`inline-flex rounded-lg p-0.5 border ${isLight ? 'bg-slate-200/80 border-slate-300' : 'bg-slate-950 border-slate-700'}`}>
+                <button
+                  type="button"
+                  onClick={() => setQtyInputMode('portion')}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition ${
+                    effectiveQtyMode === 'portion'
+                      ? 'bg-emerald-500 text-white shadow-sm'
+                      : cTextSecondary
+                  }`}
+                >
+                  Porzioni (x)
+                </button>
+                <button
+                  type="button"
+                  disabled={!activeComposerBaseGrams}
+                  onClick={() => {
+                    if (activeComposerBaseGrams) {
+                      setQtyInputMode('grams');
+                      setSelectedFoodGrams(String(activeComposerBaseGrams));
+                    }
+                  }}
+                  title={
+                    activeComposerBaseGrams
+                      ? 'Inserisci il peso esatto in grammi'
+                      : 'Disponibile per alimenti con grammatura nel nome (es. 100g)'
+                  }
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition disabled:opacity-35 ${
+                    effectiveQtyMode === 'grams'
+                      ? 'bg-emerald-500 text-white shadow-sm'
+                      : cTextSecondary
+                  }`}
+                >
+                  Grammi (g)
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2.5">
               <select
-                value={selectedFoodToAdd || (data.foods[0]?.id ?? '')}
-                onChange={(e) => setSelectedFoodToAdd(e.target.value)}
-                className={`flex-1 ${cInput} border rounded-xl px-3 py-2.5 sm:py-2 focus:outline-none`}
+                value={activeComposerFoodId}
+                onChange={(e) => handleSelectFoodInComposer(e.target.value)}
+                className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2 focus:outline-none focus:border-emerald-400`}
               >
                 {data.foods.map((f) => (
                   <option key={f.id} value={f.id} className={cOption}>
@@ -1819,48 +1926,173 @@ export default function App() {
                   </option>
                 ))}
               </select>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0.1"
-                  value={selectedFoodQty}
-                  onChange={(e) => setSelectedFoodQty(e.target.value)}
-                  className={`w-24 sm:w-20 ${cInput} border rounded-xl px-2.5 py-2 text-center`}
-                />
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                {effectiveQtyMode === 'grams' && activeComposerBaseGrams ? (
+                  <div className="flex items-center gap-1.5 flex-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedFoodGrams((prev) =>
+                          String(Math.max(5, (parseFloat(prev) || activeComposerBaseGrams) - 10))
+                        )
+                      }
+                      className={`w-10 h-10 sm:h-9 rounded-xl border font-bold ${cCard} ${cTextPrimary} active:scale-95`}
+                    >
+                      -
+                    </button>
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        value={selectedFoodGrams}
+                        onChange={(e) => setSelectedFoodGrams(e.target.value)}
+                        className={`w-full ${cInput} border rounded-xl pl-3 pr-7 py-2 text-center font-bold focus:outline-none focus:border-emerald-400`}
+                      />
+                      <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold ${cTextSecondary}`}>
+                        g
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedFoodGrams((prev) =>
+                          String((parseFloat(prev) || activeComposerBaseGrams) + 10)
+                        )
+                      }
+                      className={`w-10 h-10 sm:h-9 rounded-xl border font-bold ${cCard} ${cTextPrimary} active:scale-95`}
+                    >
+                      +
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 flex-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedFoodQty((prev) =>
+                          String(Math.max(0.25, Number(((parseFloat(prev) || 1) - 0.25).toFixed(2))))
+                        )
+                      }
+                      className={`w-10 h-10 sm:h-9 rounded-xl border font-bold ${cCard} ${cTextPrimary} active:scale-95`}
+                    >
+                      -
+                    </button>
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0.1"
+                        value={selectedFoodQty}
+                        onChange={(e) => setSelectedFoodQty(e.target.value)}
+                        className={`w-full ${cInput} border rounded-xl pl-3 pr-7 py-2 text-center font-bold focus:outline-none focus:border-emerald-400`}
+                      />
+                      <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold ${cTextSecondary}`}>
+                        x
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedFoodQty((prev) =>
+                          String(Number(((parseFloat(prev) || 1) + 0.25).toFixed(2)))
+                        )
+                      }
+                      className={`w-10 h-10 sm:h-9 rounded-xl border font-bold ${cCard} ${cTextPrimary} active:scale-95`}
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
+
                 <button
                   type="button"
                   onClick={handleAddIngredientToComposer}
-                  className={`flex-1 sm:flex-none px-4 py-2.5 sm:py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 ${cEmerald} text-xs font-semibold flex items-center justify-center gap-1`}
+                  disabled={!activeComposerFood || computedPreviewMultiplier <= 0}
+                  className={`px-4 py-2.5 sm:py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 ${cEmerald} text-xs font-bold flex items-center justify-center gap-1.5 transition shrink-0`}
                 >
-                  <Plus className="w-4 h-4" /> Aggiungi
+                  <Plus className="w-4 h-4" /> Aggiungi al Pasto
                 </button>
               </div>
+
+              {/* Anteprima macro della quantità scelta prima di aggiungere */}
+              {activeComposerFood && computedPreviewMultiplier > 0 && (
+                <div className={`text-[11px] ${cTextSecondary} flex flex-wrap items-center justify-between gap-2 pt-1 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/70'}`}>
+                  <span>
+                    Dose selezionata:{' '}
+                    <strong className={cTextPrimary}>
+                      {Number(computedPreviewMultiplier.toFixed(2))}x
+                      {activeComposerBaseGrams
+                        ? ` (~${Math.round(computedPreviewMultiplier * activeComposerBaseGrams)}g)`
+                        : ''}
+                    </strong>
+                  </span>
+                  <span className="font-semibold">
+                    <span className={cEmerald}>{Math.round(activeComposerFood.kcal * computedPreviewMultiplier)} kcal</span>
+                    {' • '}
+                    <span className={cSky}>{Math.round(activeComposerFood.p * computedPreviewMultiplier)}g P</span>
+                    {' • '}
+                    <span className={cAmber}>{Math.round(activeComposerFood.c * computedPreviewMultiplier)}g C</span>
+                    {' • '}
+                    <span className={cRose}>{Math.round(activeComposerFood.g * computedPreviewMultiplier)}g G</span>
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
           {mealItems.length > 0 && (
             <div className="space-y-2">
-              <div className={`text-xs font-semibold ${cTextSecondary}`}>Ingredienti nel pasto:</div>
+              <div className={`text-xs font-semibold ${cTextSecondary}`}>
+                Ingredienti nel pasto (puoi modificare la quantità anche qui):
+              </div>
               {mealItems.map((it, idx) => {
                 const food = getFoodById(it.foodId);
                 if (!food) return null;
+                const itemBaseG = extractBaseGrams(food);
                 return (
                   <div
                     key={idx}
-                    className={`flex items-center justify-between ${cInner} px-3 py-2.5 rounded-xl border text-xs`}
+                    className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${cInner} px-3 py-2.5 rounded-xl border text-xs`}
                   >
-                    <span className={`pr-2 ${cTextPrimary}`}>
-                      <strong className={cEmerald}>{it.qty}x</strong> {food.name}
-                    </span>
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      <span className={cTextSecondary}>
-                        {Math.round(food.kcal * it.qty)} kcal • {Math.round(food.p * it.qty)}g P
-                      </span>
+                    <div className="min-w-0">
+                      <div className={`font-medium truncate ${cTextPrimary}`}>{food.name}</div>
+                      <div className={`text-[11px] ${cTextSecondary} mt-0.5`}>
+                        {Math.round(food.kcal * it.qty)} kcal • P: {Math.round(food.p * it.qty)}g • C:{' '}
+                        {Math.round(food.c * it.qty)}g • G: {Math.round(food.g * it.qty)}g
+                        {itemBaseG ? ` • ~${Math.round(it.qty * itemBaseG)}g` : ''}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateMealItemQty(idx, Math.max(0.25, it.qty - 0.25))}
+                        className={`w-7 h-7 rounded-lg border font-bold ${cCard} ${cTextPrimary}`}
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0.1"
+                        value={it.qty}
+                        onChange={(e) => handleUpdateMealItemQty(idx, e.target.value)}
+                        className={`w-16 ${cInput} border rounded-lg px-1.5 py-1 text-center font-bold text-xs`}
+                      />
+                      <span className={`text-[11px] font-semibold ${cEmerald}`}>x</span>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateMealItemQty(idx, it.qty + 0.25)}
+                        className={`w-7 h-7 rounded-lg border font-bold ${cCard} ${cTextPrimary}`}
+                      >
+                        +
+                      </button>
                       <button
                         type="button"
                         onClick={() => setMealItems((prev) => prev.filter((_, i) => i !== idx))}
-                        className={`p-1 ${cTextSecondary} hover:text-rose-400`}
+                        className={`p-1.5 ml-1 ${cTextSecondary} hover:text-rose-400`}
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -1929,11 +2161,14 @@ export default function App() {
                     <div className={`text-xs ${cTextSecondary} space-y-0.5 mt-1.5`}>
                       {meal.items.map((it, i) => {
                         const f = getFoodById(it.foodId);
-                        return f ? (
+                        if (!f) return null;
+                        const bg = extractBaseGrams(f);
+                        return (
                           <div key={i}>
                             • {it.qty}x {f.name}
+                            {bg && it.qty !== 1 ? ` (~${Math.round(it.qty * bg)}g)` : ''}
                           </div>
-                        ) : null;
+                        );
                       })}
                     </div>
                   </div>
@@ -1958,18 +2193,35 @@ export default function App() {
       'addFoodForm',
       'Aggiungi Alimento',
       <div className={`${cCard} border rounded-2xl p-4 sm:p-5 h-fit`}>
-        <h3 className={`font-semibold text-base ${cEmerald} mb-3`}>Aggiungi Alimento al Database</h3>
+        <h3 className={`font-semibold text-base ${cEmerald} mb-1`}>Aggiungi Alimento al Database</h3>
+        <p className={`text-xs ${cTextSecondary} mb-3`}>
+          Inserisci i valori nutrizionali per la porzione di riferimento (es. 100g): potrai poi scegliere i grammi o le porzioni esatte quando componi un pasto.
+        </p>
         <form onSubmit={handleAddFood} className="space-y-3">
-          <div>
-            <label className={`block text-xs ${cTextSecondary} mb-1`}>Nome Alimento &amp; Porzione</label>
-            <input
-              type="text"
-              required
-              placeholder="Es. Fiocchi di Latte (200g)"
-              value={newFood.name}
-              onChange={(e) => setNewFood({ ...newFood, name: e.target.value })}
-              className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2 focus:outline-none focus:border-emerald-400`}
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 sm:gap-3">
+            <div className="sm:col-span-8">
+              <label className={`block text-xs ${cTextSecondary} mb-1`}>Nome Alimento</label>
+              <input
+                type="text"
+                required
+                placeholder="Es. Fiocchi di Latte"
+                value={newFood.name}
+                onChange={(e) => setNewFood({ ...newFood, name: e.target.value })}
+                className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2 focus:outline-none focus:border-emerald-400`}
+              />
+            </div>
+            <div className="sm:col-span-4">
+              <label className={`block text-xs ${cTextSecondary} mb-1`}>Porzione rif. (g)</label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                placeholder="100"
+                value={newFood.baseGrams}
+                onChange={(e) => setNewFood({ ...newFood, baseGrams: e.target.value })}
+                className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2 focus:outline-none focus:border-emerald-400`}
+              />
+            </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
             <div>
@@ -2045,8 +2297,8 @@ export default function App() {
                 key={food.id}
                 className={`${cInner} border rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-2`}
               >
-                <div>
-                  <div className={`font-medium text-sm ${cTextPrimary}`}>{food.name}</div>
+                <div className="min-w-0">
+                  <div className={`font-medium text-sm truncate ${cTextPrimary}`}>{food.name}</div>
                   <div className={`text-xs ${cTextSecondary} flex flex-wrap gap-2.5 mt-0.5`}>
                     <span className={`${cEmerald} font-semibold`}>{food.kcal} kcal</span>
                     <span>P: {food.p}g</span>
@@ -2054,9 +2306,22 @@ export default function App() {
                     <span>G: {food.g}g</span>
                   </div>
                 </div>
-                <button onClick={() => handleDeleteFood(food.id)} className={`p-2 ${cTextSecondary} hover:text-rose-400 rounded-lg`}>
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSelectFoodInComposer(food.id);
+                      setNutritionSubTab('composer');
+                    }}
+                    title="Scegli quantità e aggiungi a un pasto"
+                    className={`px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 ${cEmerald} text-xs font-semibold transition`}
+                  >
+                    + Usa
+                  </button>
+                  <button onClick={() => handleDeleteFood(food.id)} className={`p-2 ${cTextSecondary} hover:text-rose-400 rounded-lg`}>
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
