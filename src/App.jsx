@@ -37,6 +37,10 @@ import {
   Eraser,
   SkipForward,
   Check,
+  Droplets,
+  Droplet,
+  Sparkles,
+  Zap,
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://qwxfjrunqhssoonapfcl.supabase.co';
@@ -56,6 +60,20 @@ const FULL_DAYS = {
 };
 
 const MEAL_SLOTS = ['Colazione', 'Pranzo', 'Cena', 'Spuntini'];
+
+const WATER_PRESETS = [
+  { label: 'Bicchiere', amount: 200 },
+  { label: 'Bicchiere Grande', amount: 300 },
+  { label: 'Borraccia', amount: 500 },
+  { label: 'Bottiglia 1L', amount: 1000 },
+];
+
+const DRINK_TYPES = [
+  { id: 'water', label: 'Acqua Naturale / Frizzante', factor: 1 },
+  { id: 'electrolytes', label: 'Acqua + Elettroliti / Sali', factor: 1 },
+  { id: 'tea', label: 'Tè / Tisana non zuccherata', factor: 1 },
+  { id: 'coffee', label: 'Caffè / Espresso', factor: 0.8 },
+];
 
 const PRESET_BACKGROUNDS = [
   {
@@ -184,6 +202,14 @@ const INITIAL_WEIGHTS = [
   { id: 'w4', date: '2026-11-08', weight: 77.2, note: 'Addome più definito, carichi in salita' },
 ];
 
+const INITIAL_WATER_SETTINGS = {
+  autoCalculate: true,
+  mlPerKg: 35,
+  workoutBonusMl: 600,
+  manualTargetMl: 2500,
+  workoutDates: {},
+};
+
 const INITIAL_WORKOUTS = [
   {
     id: 'wo-a',
@@ -239,16 +265,22 @@ const INITIAL_LAYOUT = {
   planner: ['summaryCard', 'mealSlotsGrid'],
   composer: ['composerForm', 'savedMealsList'],
   foods: ['addFoodForm', 'foodsList'],
+  water: ['waterOverview', 'waterHistory'],
   weight: ['addWeightForm', 'weightChartCard'],
   workout: ['workoutHeader', 'exercisesList'],
 };
 
 const STORAGE_KEY = 'fittrack_pro_data_v1';
 
+function getTodayIso() {
+  return new Date().toISOString().split('T')[0];
+}
+
 function normalizeData(raw) {
   const safe = raw && typeof raw === 'object' ? raw : {};
   const layout = safe.layout && typeof safe.layout === 'object' ? safe.layout : {};
   const bg = safe.background && typeof safe.background === 'object' ? safe.background : {};
+  const ws = safe.waterSettings && typeof safe.waterSettings === 'object' ? safe.waterSettings : {};
 
   let dashLayout = Array.isArray(layout.dashboard) ? layout.dashboard : INITIAL_LAYOUT.dashboard;
   if (dashLayout.includes('nutritionCard') || dashLayout.includes('weightCard')) {
@@ -262,6 +294,14 @@ function normalizeData(raw) {
     meals: Array.isArray(safe.meals) ? safe.meals : INITIAL_MEALS,
     weeklyPlan: safe.weeklyPlan && typeof safe.weeklyPlan === 'object' ? safe.weeklyPlan : INITIAL_WEEKLY_PLAN,
     weights: Array.isArray(safe.weights) ? safe.weights : INITIAL_WEIGHTS,
+    waterLogs: Array.isArray(safe.waterLogs) ? safe.waterLogs : [],
+    waterSettings: {
+      autoCalculate: typeof ws.autoCalculate === 'boolean' ? ws.autoCalculate : INITIAL_WATER_SETTINGS.autoCalculate,
+      mlPerKg: typeof ws.mlPerKg === 'number' ? ws.mlPerKg : INITIAL_WATER_SETTINGS.mlPerKg,
+      workoutBonusMl: typeof ws.workoutBonusMl === 'number' ? ws.workoutBonusMl : INITIAL_WATER_SETTINGS.workoutBonusMl,
+      manualTargetMl: typeof ws.manualTargetMl === 'number' ? ws.manualTargetMl : INITIAL_WATER_SETTINGS.manualTargetMl,
+      workoutDates: ws.workoutDates && typeof ws.workoutDates === 'object' ? ws.workoutDates : {},
+    },
     workouts: Array.isArray(safe.workouts) && safe.workouts.length > 0 ? safe.workouts : INITIAL_WORKOUTS,
     targets: safe.targets && typeof safe.targets === 'object' ? { ...INITIAL_TARGETS, ...safe.targets } : INITIAL_TARGETS,
     theme: safe.theme === 'light' ? 'light' : 'dark',
@@ -279,6 +319,7 @@ function normalizeData(raw) {
       planner: Array.isArray(layout.planner) ? layout.planner : INITIAL_LAYOUT.planner,
       composer: Array.isArray(layout.composer) ? layout.composer : INITIAL_LAYOUT.composer,
       foods: Array.isArray(layout.foods) ? layout.foods : INITIAL_LAYOUT.foods,
+      water: Array.isArray(layout.water) ? layout.water : INITIAL_LAYOUT.water,
       weight: Array.isArray(layout.weight) ? layout.weight : INITIAL_LAYOUT.weight,
       workout: Array.isArray(layout.workout) ? layout.workout : INITIAL_LAYOUT.workout,
     },
@@ -484,6 +525,12 @@ export default function App() {
     return jsDay === 0 ? 'Dom' : DAYS[jsDay - 1];
   });
 
+  // Stati per Tracker Idratazione
+  const [selectedWaterDate, setSelectedWaterDate] = useState(() => getTodayIso());
+  const [customWaterAmount, setCustomWaterAmount] = useState('');
+  const [selectedDrinkType, setSelectedDrinkType] = useState('water');
+  const [editingWaterConfig, setEditingWaterConfig] = useState(false);
+
   const [activeWorkoutId, setActiveWorkoutId] = useState('wo-a');
   const [workoutMode, setWorkoutMode] = useState('live');
   const [completedSets, setCompletedSets] = useState({});
@@ -578,7 +625,7 @@ export default function App() {
   const [selectedFoodToAdd, setSelectedFoodToAdd] = useState('');
   const [selectedFoodQty, setSelectedFoodQty] = useState('1');
   const [newWeight, setNewWeight] = useState('');
-  const [newWeightDate, setNewWeightDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [newWeightDate, setNewWeightDate] = useState(() => getTodayIso());
   const [newWeightNote, setNewWeightNote] = useState('');
   const [editingTargets, setEditingTargets] = useState(false);
   const [tempTargets, setTempTargets] = useState(data.targets);
@@ -707,11 +754,87 @@ export default function App() {
     }));
   };
 
+  // --- FUNZIONI TRACKER IDRATAZIONE ---
+  const handleAddWater = (rawMl, containerLabel = 'Aggiunta rapida') => {
+    const ml = Math.round(Number(rawMl));
+    if (isNaN(ml) || ml <= 0) return;
+    const drinkObj = DRINK_TYPES.find((d) => d.id === selectedDrinkType) || DRINK_TYPES[0];
+    const effectiveMl = Math.round(ml * drinkObj.factor);
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const entry = {
+      id: 'wat-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      date: selectedWaterDate,
+      time: nowTime,
+      rawAmount: ml,
+      amount: effectiveMl,
+      drinkLabel: drinkObj.label,
+      containerLabel,
+    };
+
+    setData((prev) => ({
+      ...prev,
+      waterLogs: [entry, ...(prev.waterLogs || [])],
+    }));
+  };
+
+  const handleDeleteWaterLog = (id) => {
+    setData((prev) => ({
+      ...prev,
+      waterLogs: (prev.waterLogs || []).filter((item) => item.id !== id),
+    }));
+  };
+
+  const toggleWorkoutDayForWater = (dateStr) => {
+    setData((prev) => {
+      const currentMap = prev.waterSettings?.workoutDates || {};
+      const nextVal = !currentMap[dateStr];
+      return {
+        ...prev,
+        waterSettings: {
+          ...prev.waterSettings,
+          workoutDates: {
+            ...currentMap,
+            [dateStr]: nextVal,
+          },
+        },
+      };
+    });
+  };
+
+  const updateWaterSettings = (patch) => {
+    setData((prev) => ({
+      ...prev,
+      waterSettings: {
+        ...prev.waterSettings,
+        ...patch,
+      },
+    }));
+  };
+
   const toggleSetCompleted = (exercise, setIndex) => {
     const key = `${exercise.id}-${setIndex}`;
     const nextState = !completedSets[key];
     const nextCompleted = { ...completedSets, [key]: nextState };
     setCompletedSets(nextCompleted);
+
+    // Se l'utente completa almeno una serie oggi, attiva automaticamente il giorno workout nell'idratazione
+    if (nextState) {
+      const today = getTodayIso();
+      setData((prev) => {
+        if (prev.waterSettings?.workoutDates?.[today]) return prev;
+        return {
+          ...prev,
+          waterSettings: {
+            ...prev.waterSettings,
+            workoutDates: {
+              ...(prev.waterSettings?.workoutDates || {}),
+              [today]: true,
+            },
+          },
+        };
+      });
+    }
 
     if (nextState && autoStartTimer) {
       let allDone = true;
@@ -842,6 +965,12 @@ export default function App() {
         foods: [],
       }));
       setNewFood({ name: '', kcal: '', p: '', c: '', g: '' });
+    } else if (nutritionSubTab === 'water') {
+      if (!window.confirm(`Vuoi azzerare a 0 tutte le bevute registrate per il ${selectedWaterDate}?`)) return;
+      setData((prev) => ({
+        ...prev,
+        waterLogs: (prev.waterLogs || []).filter((w) => w.date !== selectedWaterDate),
+      }));
     } else if (nutritionSubTab === 'weight') {
       if (!window.confirm('Vuoi cancellare tutte le pesate registrate e portare lo storico a 0?')) return;
       setData((prev) => ({
@@ -878,7 +1007,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `fittrack-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `fittrack-backup-${getTodayIso()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -906,6 +1035,8 @@ export default function App() {
         meals: INITIAL_MEALS,
         weeklyPlan: INITIAL_WEEKLY_PLAN,
         weights: INITIAL_WEIGHTS,
+        waterLogs: [],
+        waterSettings: INITIAL_WATER_SETTINGS,
         workouts: INITIAL_WORKOUTS,
         targets: INITIAL_TARGETS,
         theme: prev.theme,
@@ -928,6 +1059,90 @@ export default function App() {
     latestWeight && prevWeight ? (latestWeight.weight - prevWeight.weight).toFixed(1) : null;
   const weightDeltaTotal =
     latestWeight && firstWeight ? (latestWeight.weight - firstWeight.weight).toFixed(1) : null;
+
+  // Calcoli intelligenti Idratazione
+  const getWaterTargetForDate = (dateStr) => {
+    const ws = data.waterSettings || INITIAL_WATER_SETTINGS;
+    if (!ws.autoCalculate) {
+      return ws.manualTargetMl || 2500;
+    }
+    const baseKg = latestWeight ? latestWeight.weight : 75;
+    const baseMl = Math.round((baseKg * (ws.mlPerKg || 35)) / 50) * 50;
+    const isWoDay = !!ws.workoutDates?.[dateStr];
+    return baseMl + (isWoDay ? ws.workoutBonusMl || 600 : 0);
+  };
+
+  const getWaterTotalForDate = (dateStr) => {
+    return (data.waterLogs || [])
+      .filter((entry) => entry.date === dateStr)
+      .reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+  };
+
+  const todayIso = getTodayIso();
+  const todayWaterTotal = getWaterTotalForDate(todayIso);
+  const todayWaterTarget = getWaterTargetForDate(todayIso);
+
+  const selectedDateWaterLogs = (data.waterLogs || []).filter((entry) => entry.date === selectedWaterDate);
+  const selectedDateWaterTotal = selectedDateWaterLogs.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const selectedDateWaterTarget = getWaterTargetForDate(selectedWaterDate);
+  const selectedDateIsWorkout = !!data.waterSettings?.workoutDates?.[selectedWaterDate];
+  const waterPercent = Math.min(100, Math.round((selectedDateWaterTotal / (selectedDateWaterTarget || 1)) * 100));
+  const waterRemainingMl = Math.max(0, selectedDateWaterTarget - selectedDateWaterTotal);
+
+  const getSmartHydrationAdvice = () => {
+    if (selectedDateWaterTotal >= selectedDateWaterTarget) {
+      return {
+        tone: 'success',
+        text: 'Obiettivo idratazione raggiunto! Ottimo supporto per recupero muscolare, digestione e concentrazione.',
+      };
+    }
+    if (selectedWaterDate !== todayIso) {
+      return {
+        tone: 'neutral',
+        text: `Giornata archiviata: mancavano ${waterRemainingMl} ml per completare l'obiettivo di ${selectedDateWaterTarget} ml.`,
+      };
+    }
+    const nowHour = new Date().getHours();
+    if (nowHour >= 21) {
+      return {
+        tone: 'warn',
+        text: `Mancano ${waterRemainingMl} ml. È sera tardi: bevi a piccoli sorsi per non interrompere il sonno.`,
+      };
+    }
+    const expectedRatio = Math.min(1, Math.max(0, (nowHour - 8) / 13));
+    const expectedMl = Math.round(selectedDateWaterTarget * expectedRatio);
+    const hoursLeft = Math.max(1, 21 - nowHour);
+    const mlPerHour = Math.round(waterRemainingMl / hoursLeft);
+
+    if (selectedDateWaterTotal + 250 < expectedMl) {
+      return {
+        tone: 'warn',
+        text: `Sei un po' indietro rispetto all'orario (~${expectedMl} ml attesi). Bevi circa ${mlPerHour} ml/ora entro le 21:00 per recuperare.`,
+      };
+    }
+    return {
+      tone: 'good',
+      text: `Ottimo ritmo! Ti bastano circa ${mlPerHour} ml ogni ora fino alle 21:00 per raggiungere i ${selectedDateWaterTarget} ml.`,
+    };
+  };
+
+  // Ultimi 7 giorni per grafico a barre idratazione
+  const last7WaterDays = Array.from({ length: 7 }).map((_, idx) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - idx));
+    const iso = d.toISOString().split('T')[0];
+    const dayShort = d.getDay() === 0 ? 'Dom' : DAYS[d.getDay() - 1];
+    const total = getWaterTotalForDate(iso);
+    const target = getWaterTargetForDate(iso);
+    return {
+      iso,
+      dayShort,
+      dayNum: iso.slice(8, 10),
+      total,
+      target,
+      pct: Math.min(100, Math.round((total / (target || 1)) * 100)),
+    };
+  });
 
   const totalSetsInWorkout = currentWorkout
     ? currentWorkout.exercises.reduce((sum, ex) => sum + ex.sets, 0)
@@ -998,7 +1213,6 @@ export default function App() {
   const cTextPrimary = isLight ? 'text-slate-900' : 'text-white';
   const cTextSecondary = isLight ? 'text-slate-600' : 'text-slate-300';
 
-  // Colori accento calibrati per avere alto contrasto sia su bianco che su scuro
   const cEmerald = isLight ? 'text-emerald-600' : 'text-emerald-400';
   const cIndigo = isLight ? 'text-indigo-600' : 'text-indigo-400';
   const cAmber = isLight ? 'text-amber-600' : 'text-amber-400';
@@ -1199,69 +1413,104 @@ export default function App() {
       'topCardsRow',
       'Riepilogo Alimentazione & Peso',
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-        {/* Card Alimentazione */}
+        {/* Card Alimentazione + Idratazione Rapida */}
         <div className={`${cCard} border rounded-2xl p-4 sm:p-5 flex flex-col justify-between`}>
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 shrink-0">
-                <Utensils className={`w-5 h-5 ${cEmerald}`} />
-              </div>
-              <div>
-                <h3 className={`font-semibold text-sm sm:text-base ${cTextPrimary}`}>
-                  Alimentazione — {FULL_DAYS[selectedDay]}
-                </h3>
-                <p className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Bilancio energetico e macro</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setActiveTab('nutrition')}
-              className={`text-xs ${cEmerald} hover:underline flex items-center gap-0.5 font-semibold shrink-0 py-1`}
-            >
-              Piano <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className={`${cInner} border rounded-xl p-3.5 sm:p-4 mb-3.5`}>
-            <div className="flex justify-between items-baseline mb-2">
-              <span className={`text-[11px] uppercase tracking-wider font-semibold ${cTextSecondary}`}>
-                Calorie Pianificate
-              </span>
-              <div className="text-right">
-                <span className={`text-xl sm:text-2xl font-bold ${cTextPrimary}`}>{dayMacros.kcal}</span>
-                <span className={`text-xs ${cTextSecondary}`}> / {data.targets.kcal} kcal</span>
-              </div>
-            </div>
-            <div className={`w-full h-2.5 sm:h-3 ${isLight ? 'bg-slate-200' : 'bg-slate-950'} rounded-full overflow-hidden`}>
-              <div
-                className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300"
-                style={{ width: `${Math.min(100, Math.round((dayMacros.kcal / (data.targets.kcal || 1)) * 100))}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            {[
-              { label: 'Proteine', short: 'Prot.', val: dayMacros.p, target: data.targets.p, color: 'bg-sky-400' },
-              { label: 'Carboidrati', short: 'Carbo', val: dayMacros.c, target: data.targets.c, color: 'bg-amber-400' },
-              { label: 'Grassi', short: 'Grassi', val: dayMacros.g, target: data.targets.g, color: 'bg-rose-400' },
-            ].map((m) => {
-              const pct = Math.min(100, Math.round((m.val / (m.target || 1)) * 100));
-              return (
-                <div key={m.label} className={`${cInner} border rounded-xl p-2.5 sm:p-3`}>
-                  <div className={`text-[11px] sm:text-xs font-medium ${cTextSecondary} mb-1`}>
-                    <span className="sm:hidden">{m.short}</span>
-                    <span className="hidden sm:inline">{m.label}</span>
-                  </div>
-                  <div className={`font-bold text-sm sm:text-base ${cTextPrimary}`}>
-                    {m.val}g <span className={`text-[11px] font-normal ${cTextSecondary}`}>/{m.target}</span>
-                  </div>
-                  <div className={`w-full h-1.5 ${isLight ? 'bg-slate-200' : 'bg-slate-950'} rounded-full mt-2 overflow-hidden`}>
-                    <div className={`h-full ${m.color} rounded-full`} style={{ width: `${pct}%` }} />
-                  </div>
+          <div>
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 shrink-0">
+                  <Utensils className={`w-5 h-5 ${cEmerald}`} />
                 </div>
-              );
-            })}
+                <div>
+                  <h3 className={`font-semibold text-sm sm:text-base ${cTextPrimary}`}>
+                    Alimentazione — {FULL_DAYS[selectedDay]}
+                  </h3>
+                  <p className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Bilancio energetico, macro &amp; acqua</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveTab('nutrition')}
+                className={`text-xs ${cEmerald} hover:underline flex items-center gap-0.5 font-semibold shrink-0 py-1`}
+              >
+                Piano <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className={`${cInner} border rounded-xl p-3.5 sm:p-4 mb-3`}>
+              <div className="flex justify-between items-baseline mb-2">
+                <span className={`text-[11px] uppercase tracking-wider font-semibold ${cTextSecondary}`}>
+                  Calorie Pianificate
+                </span>
+                <div className="text-right">
+                  <span className={`text-xl sm:text-2xl font-bold ${cTextPrimary}`}>{dayMacros.kcal}</span>
+                  <span className={`text-xs ${cTextSecondary}`}> / {data.targets.kcal} kcal</span>
+                </div>
+              </div>
+              <div className={`w-full h-2.5 sm:h-3 ${isLight ? 'bg-slate-200' : 'bg-slate-950'} rounded-full overflow-hidden`}>
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(100, Math.round((dayMacros.kcal / (data.targets.kcal || 1)) * 100))}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-3">
+              {[
+                { label: 'Proteine', short: 'Prot.', val: dayMacros.p, target: data.targets.p, color: 'bg-sky-400' },
+                { label: 'Carboidrati', short: 'Carbo', val: dayMacros.c, target: data.targets.c, color: 'bg-amber-400' },
+                { label: 'Grassi', short: 'Grassi', val: dayMacros.g, target: data.targets.g, color: 'bg-rose-400' },
+              ].map((m) => {
+                const pct = Math.min(100, Math.round((m.val / (m.target || 1)) * 100));
+                return (
+                  <div key={m.label} className={`${cInner} border rounded-xl p-2.5 sm:p-3`}>
+                    <div className={`text-[11px] sm:text-xs font-medium ${cTextSecondary} mb-1`}>
+                      <span className="sm:hidden">{m.short}</span>
+                      <span className="hidden sm:inline">{m.label}</span>
+                    </div>
+                    <div className={`font-bold text-sm sm:text-base ${cTextPrimary}`}>
+                      {m.val}g <span className={`text-[11px] font-normal ${cTextSecondary}`}>/{m.target}</span>
+                    </div>
+                    <div className={`w-full h-1.5 ${isLight ? 'bg-slate-200' : 'bg-slate-950'} rounded-full mt-2 overflow-hidden`}>
+                      <div className={`h-full ${m.color} rounded-full`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
+
+          {/* Barra Rapida Idratazione Oggi */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('nutrition');
+              setNutritionSubTab('water');
+            }}
+            className={`w-full ${cInner} hover:border-sky-400/60 border rounded-xl p-2.5 sm:p-3 text-left transition flex items-center justify-between gap-3`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="p-1.5 rounded-lg bg-sky-500/20 border border-sky-400/35 shrink-0">
+                <Droplets className={`w-4 h-4 ${cSky}`} />
+              </div>
+              <div className="min-w-0">
+                <div className={`text-xs font-semibold ${cTextPrimary} flex items-center gap-1.5`}>
+                  <span>Idratazione Oggi</span>
+                  <span className={`text-[11px] font-bold ${cSky}`}>
+                    {todayWaterTotal} / {todayWaterTarget} ml
+                  </span>
+                </div>
+                <div className={`w-36 sm:w-44 h-1.5 ${isLight ? 'bg-slate-200' : 'bg-slate-950'} rounded-full mt-1.5 overflow-hidden`}>
+                  <div
+                    className="h-full bg-gradient-to-r from-sky-500 to-cyan-400 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, Math.round((todayWaterTotal / (todayWaterTarget || 1)) * 100))}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+            <span className={`text-xs font-semibold ${cSky} flex items-center gap-0.5 shrink-0`}>
+              + Acqua <ChevronRight className="w-3.5 h-3.5" />
+            </span>
+          </button>
         </div>
 
         {/* Card Peso Corporeo */}
@@ -1816,6 +2065,363 @@ export default function App() {
     ),
   };
 
+  // --- BLOCCHI PER TRACKER IDRATAZIONE INTELLIGENTE ---
+  const smartAdvice = getSmartHydrationAdvice();
+
+  const waterSections = {
+    waterOverview: renderReorderWrapper(
+      'water',
+      'waterOverview',
+      'Tracker Idratazione & Aggiunta Rapida',
+      <div className={`${cCard} border rounded-2xl p-4 sm:p-5 space-y-4`}>
+        {/* Intestazione + Selettore Data + Giorno Workout */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 rounded-xl bg-sky-500/20 border border-sky-400/35 shrink-0">
+              <Droplets className={`w-5 h-5 ${cSky}`} />
+            </div>
+            <div>
+              <h3 className={`font-semibold text-base ${cTextPrimary} flex items-center gap-2`}>
+                Idratazione Intelligente
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full bg-sky-500/20 ${cSky}`}>
+                  {waterPercent}%
+                </span>
+              </h3>
+              <p className={`text-xs ${cTextSecondary}`}>
+                {data.waterSettings?.autoCalculate
+                  ? `Calcolato su ${latestWeight ? latestWeight.weight : 75} kg (${data.waterSettings.mlPerKg} ml/kg)`
+                  : 'Obiettivo manuale personalizzato'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              value={selectedWaterDate}
+              onChange={(e) => setSelectedWaterDate(e.target.value || getTodayIso())}
+              className={`${cInput} border rounded-xl px-3 py-2 text-xs font-semibold`}
+            />
+
+            <button
+              type="button"
+              onClick={() => toggleWorkoutDayForWater(selectedWaterDate)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition ${
+                selectedDateIsWorkout
+                  ? `bg-amber-500/20 border-amber-400/60 ${cAmber}`
+                  : `${cInner} ${cTextSecondary}`
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>Workout (+{data.waterSettings?.workoutBonusMl || 600}ml)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setEditingWaterConfig((v) => !v)}
+              title="Configura calcolo intelligente"
+              className={`p-2 rounded-xl border transition ${
+                editingWaterConfig
+                  ? `bg-sky-500/20 border-sky-400/50 ${cSky}`
+                  : `${cInner} ${cTextSecondary}`
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Pannello Configurazione Calcolo Intelligente */}
+        {editingWaterConfig && (
+          <div className={`${cInner} border border-sky-400/40 rounded-xl p-3.5 space-y-3`}>
+            <div className="flex items-center justify-between">
+              <span className={`text-xs font-semibold ${cSky} flex items-center gap-1.5`}>
+                <Sparkles className="w-3.5 h-3.5" /> Parametri Calcolo Fabbisogno Idrico
+              </span>
+              <button onClick={() => setEditingWaterConfig(false)} className={`p-1 ${cTextSecondary} hover:text-rose-400`}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => updateWaterSettings({ autoCalculate: true })}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold border transition ${
+                  data.waterSettings?.autoCalculate
+                    ? 'bg-sky-500 border-sky-400 text-white'
+                    : `${cCard} ${cTextSecondary}`
+                }`}
+              >
+                Auto (Peso + Workout)
+              </button>
+              <button
+                type="button"
+                onClick={() => updateWaterSettings({ autoCalculate: false })}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold border transition ${
+                  !data.waterSettings?.autoCalculate
+                    ? 'bg-sky-500 border-sky-400 text-white'
+                    : `${cCard} ${cTextSecondary}`
+                }`}
+              >
+                Obiettivo Fisso (ml)
+              </button>
+            </div>
+
+            {data.waterSettings?.autoCalculate ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Rapporto Base (ml / kg)</label>
+                  <input
+                    type="number"
+                    min="20"
+                    max="60"
+                    value={data.waterSettings?.mlPerKg || 35}
+                    onChange={(e) => updateWaterSettings({ mlPerKg: Math.max(20, Number(e.target.value) || 35) })}
+                    className={`w-full ${cInput} border rounded-xl px-3 py-2`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Bonus Allenamento (ml)</label>
+                  <input
+                    type="number"
+                    step="50"
+                    min="0"
+                    max="2000"
+                    value={data.waterSettings?.workoutBonusMl ?? 600}
+                    onChange={(e) => updateWaterSettings({ workoutBonusMl: Math.max(0, Number(e.target.value) || 0) })}
+                    className={`w-full ${cInput} border rounded-xl px-3 py-2`}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Target Giornaliero Fisso (ml)</label>
+                <input
+                  type="number"
+                  step="100"
+                  min="500"
+                  max="8000"
+                  value={data.waterSettings?.manualTargetMl || 2500}
+                  onChange={(e) => updateWaterSettings({ manualTargetMl: Math.max(500, Number(e.target.value) || 2500) })}
+                  className={`w-full ${cInput} border rounded-xl px-3 py-2`}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Progresso Principale + Suggerimento Intelligente */}
+        <div className={`${cInner} border rounded-2xl p-4 space-y-3`}>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <span className={`text-2xl sm:text-3xl font-bold ${cTextPrimary}`}>{selectedDateWaterTotal}</span>
+              <span className={`text-sm font-medium ${cTextSecondary}`}> / {selectedDateWaterTarget} ml</span>
+            </div>
+            <div className="flex items-center gap-3 text-xs">
+              <span className={cTextSecondary}>
+                ~<strong className={cTextPrimary}>{Math.round(selectedDateWaterTotal / 200)}</strong> bicchieri
+              </span>
+              {waterRemainingMl > 0 ? (
+                <span className={`font-semibold ${cSky}`}>Mancano {waterRemainingMl} ml</span>
+              ) : (
+                <span className={`font-semibold ${cEmerald}`}>Target completato!</span>
+              )}
+            </div>
+          </div>
+
+          <div className={`w-full h-3.5 ${isLight ? 'bg-slate-200' : 'bg-slate-950'} rounded-full overflow-hidden`}>
+            <div
+              className={`h-full rounded-full transition-all duration-300 ${
+                selectedDateWaterTotal >= selectedDateWaterTarget
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                  : 'bg-gradient-to-r from-sky-500 to-cyan-400'
+              }`}
+              style={{ width: `${waterPercent}%` }}
+            />
+          </div>
+
+          <div
+            className={`rounded-xl px-3 py-2.5 text-xs flex items-start gap-2 border ${
+              smartAdvice.tone === 'success'
+                ? `bg-emerald-500/15 border-emerald-400/40 ${cEmerald}`
+                : smartAdvice.tone === 'warn'
+                ? `bg-amber-500/15 border-amber-400/40 ${cAmber}`
+                : `bg-sky-500/15 border-sky-400/40 ${cSky}`
+            }`}
+          >
+            <Sparkles className="w-4 h-4 shrink-0 mt-0.5" />
+            <span className="font-medium leading-relaxed">{smartAdvice.text}</span>
+          </div>
+        </div>
+
+        {/* Selettore Bevanda & Pulsanti Quick-Add */}
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className={`text-xs font-semibold ${cTextSecondary}`}>Aggiungi rapidamente:</span>
+            <select
+              value={selectedDrinkType}
+              onChange={(e) => setSelectedDrinkType(e.target.value)}
+              className={`${cInput} border rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-sky-400`}
+            >
+              {DRINK_TYPES.map((d) => (
+                <option key={d.id} value={d.id} className={cOption}>
+                  {d.label} {d.factor < 1 ? `(idratazione ${Math.round(d.factor * 100)}%)` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            {WATER_PRESETS.map((preset) => (
+              <button
+                key={preset.amount}
+                type="button"
+                onClick={() => handleAddWater(preset.amount, preset.label)}
+                className={`${cInner} hover:border-sky-400 active:scale-95 border rounded-xl p-3 flex flex-col items-center justify-center gap-1 transition`}
+              >
+                <div className="flex items-center gap-1 text-sky-400 font-bold text-sm sm:text-base">
+                  <Droplet className="w-4 h-4 fill-current" />
+                  <span>+{preset.amount} ml</span>
+                </div>
+                <span className={`text-[11px] font-medium ${cTextSecondary}`}>{preset.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!customWaterAmount) return;
+              handleAddWater(customWaterAmount, 'Quantità manuale');
+              setCustomWaterAmount('');
+            }}
+            className="flex gap-2"
+          >
+            <input
+              type="number"
+              min="10"
+              max="3000"
+              step="10"
+              placeholder="Quantità personalizzata in ml (es. 350)"
+              value={customWaterAmount}
+              onChange={(e) => setCustomWaterAmount(e.target.value)}
+              className={`flex-1 ${cInput} border rounded-xl px-3.5 py-2.5 sm:py-2 focus:outline-none focus:border-sky-400`}
+            />
+            <button
+              type="submit"
+              disabled={!customWaterAmount}
+              className="px-4 py-2.5 sm:py-2 rounded-xl bg-sky-500 hover:bg-sky-400 disabled:opacity-40 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 transition shrink-0"
+            >
+              <Plus className="w-4 h-4" /> Aggiungi
+            </button>
+          </form>
+        </div>
+      </div>
+    ),
+
+    waterHistory: renderReorderWrapper(
+      'water',
+      'waterHistory',
+      'Andamento Settimanale & Registro Giornaliero',
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Grafico a barre ultimi 7 giorni */}
+        <div className={`${cCard} border rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-4`}>
+          <div>
+            <h3 className={`font-semibold text-base ${cTextPrimary}`}>Ultimi 7 Giorni</h3>
+            <p className={`text-xs ${cTextSecondary}`}>Tocca un giorno per visualizzare o modificare le bevute</p>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2 items-end h-40 pt-4">
+            {last7WaterDays.map((day) => {
+              const isSelected = day.iso === selectedWaterDate;
+              const isGoalMet = day.total >= day.target && day.total > 0;
+              return (
+                <button
+                  key={day.iso}
+                  type="button"
+                  onClick={() => setSelectedWaterDate(day.iso)}
+                  className={`h-full flex flex-col items-center justify-end gap-1.5 p-1 rounded-xl transition ${
+                    isSelected
+                      ? isLight
+                        ? 'bg-sky-100/80 ring-1 ring-sky-400'
+                        : 'bg-sky-500/15 ring-1 ring-sky-400/60'
+                      : ''
+                  }`}
+                >
+                  <span className={`text-[10px] font-bold ${isGoalMet ? cEmerald : cTextSecondary}`}>
+                    {day.total > 0 ? `${(day.total / 1000).toFixed(1)}L` : '0'}
+                  </span>
+                  <div className={`w-full h-24 ${isLight ? 'bg-slate-200' : 'bg-slate-950'} rounded-lg flex items-end overflow-hidden p-0.5`}>
+                    <div
+                      className={`w-full rounded-md transition-all duration-300 ${
+                        isGoalMet
+                          ? 'bg-gradient-to-t from-emerald-500 to-teal-400'
+                          : 'bg-gradient-to-t from-sky-500 to-cyan-400'
+                      }`}
+                      style={{ height: `${Math.max(day.total > 0 ? 10 : 0, day.pct)}%` }}
+                    />
+                  </div>
+                  <div className="text-center leading-tight">
+                    <div className={`text-[11px] font-semibold ${isSelected ? cSky : cTextPrimary}`}>{day.dayShort}</div>
+                    <div className={`text-[10px] ${cTextSecondary}`}>{day.dayNum}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Log giornaliero */}
+        <div className={`${cCard} border rounded-2xl p-4 sm:p-5 space-y-3`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className={`font-semibold text-base ${cTextPrimary}`}>Registro del {selectedWaterDate}</h3>
+              <p className={`text-xs ${cTextSecondary}`}>{selectedDateWaterLogs.length} assunzioni registrate</p>
+            </div>
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-lg bg-sky-500/20 ${cSky}`}>
+              {selectedDateWaterTotal} ml
+            </span>
+          </div>
+
+          {selectedDateWaterLogs.length === 0 ? (
+            <p className={`text-xs ${cTextSecondary} italic py-8 text-center border border-dashed ${isLight ? 'border-slate-300' : 'border-slate-700'} rounded-xl`}>
+              Nessuna bevuta registrata in questa data. Usa i pulsanti rapidi qui sopra!
+            </p>
+          ) : (
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {selectedDateWaterLogs.map((log) => (
+                <div
+                  key={log.id}
+                  className={`${cInner} border rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-2`}
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className={`font-bold text-sm ${cSky}`}>+{log.amount} ml</span>
+                      <span className={`text-xs font-medium ${cTextPrimary}`}>{log.containerLabel}</span>
+                      <span className={`text-[11px] ${cTextSecondary}`}>• {log.time}</span>
+                    </div>
+                    {log.drinkLabel && log.drinkLabel !== 'Acqua Naturale / Frizzante' && (
+                      <div className={`text-[11px] ${cTextSecondary} mt-0.5`}>
+                        {log.drinkLabel} {log.rawAmount !== log.amount ? `(${log.rawAmount} ml lordi)` : ''}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleDeleteWaterLog(log.id)}
+                    className={`p-2 ${cTextSecondary} hover:text-rose-400 rounded-lg transition`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    ),
+  };
+
   const weightSections = {
     addWeightForm: renderReorderWrapper(
       'weight',
@@ -2224,7 +2830,7 @@ export default function App() {
                           {isDone ? (
                             <CheckCircle2 className="w-4 h-4 shrink-0" />
                           ) : (
-                            <Circle className={`w-4 h-4 shrink-0 ${isLight ? 'text-slate-400' : 'text-slate-400'}`} />
+                            <Circle className="w-4 h-4 shrink-0 text-slate-400" />
                           )}
                           Serie {setIdx + 1}
                         </button>
@@ -2358,7 +2964,7 @@ export default function App() {
                 FitTrack <span className={cEmerald}>Pro</span>
               </h1>
               <p className={`hidden sm:block text-[11px] ${cTextSecondary} mt-0.5 truncate`}>
-                Dieta Settimanale • Peso • Manubri &amp; Corpo Libero
+                Dieta Settimanale • Idratazione • Peso • Manubri &amp; Corpo Libero
               </p>
             </div>
           </div>
@@ -2738,28 +3344,30 @@ export default function App() {
                   'Barra Sotto-Sezioni Alimentazione',
                   <div className="space-y-3">
                     <div className={`flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 ${cCard} border p-2 rounded-2xl`}>
-                      <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5">
+                      <div className="grid grid-cols-3 sm:flex sm:flex-wrap gap-1.5">
                         {[
-                          { id: 'planner', label: 'Piano', fullLabel: 'Piano Settimanale', icon: Calendar },
-                          { id: 'composer', label: 'Componi', fullLabel: 'Componi Pasti', icon: Plus },
-                          { id: 'foods', label: `Alimenti (${data.foods.length})`, fullLabel: `Alimenti (${data.foods.length})`, icon: Utensils },
-                          { id: 'weight', label: 'Peso', fullLabel: 'Tracker Peso', icon: Scale },
+                          { id: 'planner', label: 'Piano', fullLabel: 'Piano Settimanale', icon: Calendar, activeBg: 'bg-emerald-500' },
+                          { id: 'composer', label: 'Componi', fullLabel: 'Componi Pasti', icon: Plus, activeBg: 'bg-emerald-500' },
+                          { id: 'foods', label: `Alimenti (${data.foods.length})`, fullLabel: `Alimenti (${data.foods.length})`, icon: Utensils, activeBg: 'bg-emerald-500' },
+                          { id: 'water', label: 'Acqua', fullLabel: 'Idratazione', icon: Droplets, activeBg: 'bg-sky-500' },
+                          { id: 'weight', label: 'Peso', fullLabel: 'Tracker Peso', icon: Scale, activeBg: 'bg-emerald-500' },
                         ].map((tab) => {
                           const Icon = tab.icon;
+                          const isTabActive = nutritionSubTab === tab.id;
                           return (
                             <button
                               key={tab.id}
                               onClick={() => setNutritionSubTab(tab.id)}
-                              className={`flex items-center justify-center sm:justify-start gap-1.5 px-3 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition ${
-                                nutritionSubTab === tab.id
-                                  ? 'bg-emerald-500 text-white font-semibold shadow-sm'
+                              className={`flex items-center justify-center sm:justify-start gap-1.5 px-2.5 sm:px-3 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition ${
+                                isTabActive
+                                  ? `${tab.activeBg} text-white font-semibold shadow-sm`
                                   : isLight
                                   ? 'text-slate-600 hover:bg-slate-100'
                                   : 'text-slate-300 hover:text-white hover:bg-slate-800'
                               }`}
                             >
                               <Icon className="w-4 h-4 shrink-0" />
-                              <span className="sm:hidden">{tab.label}</span>
+                              <span className="sm:hidden truncate">{tab.label}</span>
                               <span className="hidden sm:inline">{tab.fullLabel}</span>
                             </button>
                           );
@@ -2853,6 +3461,12 @@ export default function App() {
                     {nutritionSubTab === 'foods' && (
                       <div className="space-y-4 sm:space-y-5">
                         {data.layout.foods.map((fId) => foodsSections[fId] || null)}
+                      </div>
+                    )}
+
+                    {nutritionSubTab === 'water' && (
+                      <div className="space-y-4 sm:space-y-5">
+                        {data.layout.water.map((watId) => waterSections[watId] || null)}
                       </div>
                     )}
 
