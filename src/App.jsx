@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
-  LayoutDashboard,
   Utensils,
   Dumbbell,
   Scale,
@@ -263,7 +262,6 @@ const INITIAL_TARGETS = {
 };
 
 const INITIAL_LAYOUT = {
-  dashboard: ['daySelector', 'topCardsRow', 'workoutsCard'],
   nutrition: ['subNav', 'mainContent'],
   planner: ['summaryCard', 'mealSlotsGrid'],
   composer: ['composerForm', 'savedMealsList'],
@@ -330,13 +328,6 @@ function normalizeData(raw) {
   const bg = safe.background && typeof safe.background === 'object' ? safe.background : {};
   const ws = safe.waterSettings && typeof safe.waterSettings === 'object' ? safe.waterSettings : {};
 
-  let dashLayout = Array.isArray(layout.dashboard) ? layout.dashboard : INITIAL_LAYOUT.dashboard;
-  if (dashLayout.includes('nutritionCard') || dashLayout.includes('weightCard')) {
-    dashLayout = dashLayout
-      .map((item) => (item === 'nutritionCard' ? 'topCardsRow' : item))
-      .filter((item) => item !== 'weightCard');
-  }
-
   return {
     foods: Array.isArray(safe.foods) ? safe.foods : INITIAL_FOODS,
     meals: Array.isArray(safe.meals) ? safe.meals : INITIAL_MEALS,
@@ -362,7 +353,6 @@ function normalizeData(raw) {
       overlayOpacity: typeof bg.overlayOpacity === 'number' ? bg.overlayOpacity : INITIAL_BACKGROUND.overlayOpacity,
     },
     layout: {
-      dashboard: dashLayout,
       nutrition: Array.isArray(layout.nutrition) ? layout.nutrition : INITIAL_LAYOUT.nutrition,
       planner: Array.isArray(layout.planner) ? layout.planner : INITIAL_LAYOUT.planner,
       composer: Array.isArray(layout.composer) ? layout.composer : INITIAL_LAYOUT.composer,
@@ -601,7 +591,7 @@ export default function App() {
     };
   }, [data]);
 
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('nutrition');
   const [nutritionSubTab, setNutritionSubTab] = useState('planner');
 
   // Data corrente reattiva (si aggiorna automaticamente allo scoccare delle 00:00 o al risveglio dell'app)
@@ -1112,21 +1102,6 @@ export default function App() {
     }));
   };
 
-  const handleResetDashboardPage = () => {
-    if (!window.confirm(`Vuoi azzerare a 0 i pasti di ${FULL_DAYS[selectedDay]} e le spunte delle serie?`)) return;
-    setData((prev) => ({
-      ...prev,
-      weeklyPlan: {
-        ...prev.weeklyPlan,
-        [selectedDay]: { Colazione: [], Pranzo: [], Cena: [], Spuntini: [] },
-      },
-    }));
-    setCompletedSets({});
-    setTimerRunning(false);
-    setTimerFinishedAlert(false);
-    setTimerSeconds(0);
-  };
-
   const handleResetNutritionSubPage = () => {
     if (nutritionSubTab === 'planner') {
       if (!window.confirm('Vuoi azzerare a 0 tutti i pasti pianificati dell’intera settimana?')) return;
@@ -1262,9 +1237,6 @@ export default function App() {
       .filter((entry) => entry.date === dateStr)
       .reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
   };
-
-  const todayWaterTotal = getWaterTotalForDate(todayIso);
-  const todayWaterTarget = getWaterTargetForDate(todayIso);
 
   const selectedDateWaterLogs = (data.waterLogs || []).filter((entry) => entry.date === selectedWaterDate);
   const selectedDateWaterTotal = selectedDateWaterLogs.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
@@ -1531,270 +1503,6 @@ export default function App() {
         </svg>
       </div>
     );
-  };
-
-  // --- BLOCCHI RENDERIZZABILI PER DASHBOARD ---
-  const dashboardSections = {
-    daySelector: renderReorderWrapper(
-      'dashboard',
-      'daySelector',
-      'Selettore Giorno',
-      <div className={`${cCard} border rounded-2xl p-3.5 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3`}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className={`text-sm sm:text-base font-semibold flex items-center gap-2 ${cTextPrimary}`}>
-              <Calendar className={`w-4 h-4 ${cEmerald}`} />
-              Riepilogo Giornaliero
-            </h2>
-            <p className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Visualizza macro e stato workout</p>
-          </div>
-          <button
-            onClick={handleResetDashboardPage}
-            title={`Azzera a 0 i pasti di ${FULL_DAYS[selectedDay]} e le serie completate`}
-            className={`sm:hidden flex items-center gap-1 text-xs px-2.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/35 ${cRose} font-semibold transition`}
-          >
-            <Eraser className="w-3.5 h-3.5" />
-            <span>Azzera</span>
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className={`flex-1 sm:flex-none grid grid-cols-7 gap-1 ${cInner} p-1 rounded-xl border`}>
-            {DAYS.map((d) => (
-              <button
-                key={d}
-                onClick={() => setSelectedDay(d)}
-                className={`py-2 sm:px-3.5 sm:py-1.5 rounded-lg text-xs font-semibold text-center transition ${
-                  selectedDay === d
-                    ? 'bg-emerald-500 text-white shadow-sm'
-                    : isLight
-                    ? 'text-slate-600 hover:text-slate-950'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-                }`}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={handleResetDashboardPage}
-            title={`Azzera a 0 i pasti di ${FULL_DAYS[selectedDay]} e le serie completate`}
-            className={`hidden sm:flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/35 ${cRose} font-semibold transition whitespace-nowrap`}
-          >
-            <Eraser className="w-3.5 h-3.5" />
-            <span>Azzera a 0</span>
-          </button>
-        </div>
-      </div>
-    ),
-
-    topCardsRow: renderReorderWrapper(
-      'dashboard',
-      'topCardsRow',
-      'Riepilogo Alimentazione & Peso',
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-        {/* Card Alimentazione + Idratazione Rapida */}
-        <div className={`${cCard} border rounded-2xl p-4 sm:p-5 flex flex-col justify-between`}>
-          <div>
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 shrink-0">
-                  <Utensils className={`w-5 h-5 ${cEmerald}`} />
-                </div>
-                <div>
-                  <h3 className={`font-semibold text-sm sm:text-base ${cTextPrimary}`}>
-                    Alimentazione — {FULL_DAYS[selectedDay]}
-                  </h3>
-                  <p className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Bilancio energetico, macro &amp; acqua</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setActiveTab('nutrition')}
-                className={`text-xs ${cEmerald} hover:underline flex items-center gap-0.5 font-semibold shrink-0 py-1`}
-              >
-                Piano <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className={`${cInner} border rounded-xl p-3.5 sm:p-4 mb-3`}>
-              <div className="flex justify-between items-baseline mb-2">
-                <span className={`text-[11px] uppercase tracking-wider font-semibold ${cTextSecondary}`}>
-                  Calorie Pianificate
-                </span>
-                <div className="text-right">
-                  <span className={`text-xl sm:text-2xl font-bold ${cTextPrimary}`}>{dayMacros.kcal}</span>
-                  <span className={`text-xs ${cTextSecondary}`}> / {data.targets.kcal} kcal</span>
-                </div>
-              </div>
-              <div className={`w-full h-2.5 sm:h-3 ${isLight ? 'bg-slate-200' : 'bg-slate-950'} rounded-full overflow-hidden`}>
-                <div
-                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.min(100, Math.round((dayMacros.kcal / (data.targets.kcal || 1)) * 100))}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-3">
-              {[
-                { label: 'Proteine', short: 'Prot.', val: dayMacros.p, target: data.targets.p, color: 'bg-sky-400' },
-                { label: 'Carboidrati', short: 'Carbo', val: dayMacros.c, target: data.targets.c, color: 'bg-amber-400' },
-                { label: 'Grassi', short: 'Grassi', val: dayMacros.g, target: data.targets.g, color: 'bg-rose-400' },
-              ].map((m) => {
-                const pct = Math.min(100, Math.round((m.val / (m.target || 1)) * 100));
-                return (
-                  <div key={m.label} className={`${cInner} border rounded-xl p-2.5 sm:p-3`}>
-                    <div className={`text-[11px] sm:text-xs font-medium ${cTextSecondary} mb-1`}>
-                      <span className="sm:hidden">{m.short}</span>
-                      <span className="hidden sm:inline">{m.label}</span>
-                    </div>
-                    <div className={`font-bold text-sm sm:text-base ${cTextPrimary}`}>
-                      {m.val}g <span className={`text-[11px] font-normal ${cTextSecondary}`}>/{m.target}</span>
-                    </div>
-                    <div className={`w-full h-1.5 ${isLight ? 'bg-slate-200' : 'bg-slate-950'} rounded-full mt-2 overflow-hidden`}>
-                      <div className={`h-full ${m.color} rounded-full`} style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Barra Rapida Idratazione Oggi */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('nutrition');
-              setNutritionSubTab('water');
-            }}
-            className={`w-full ${cInner} hover:border-sky-400/60 border rounded-xl p-2.5 sm:p-3 text-left transition flex items-center justify-between gap-3`}
-          >
-            <div className="flex items-center gap-2.5 min-w-0 flex-1">
-              <div className="p-1.5 rounded-lg bg-sky-500/20 border border-sky-400/35 shrink-0">
-                <Droplets className={`w-4 h-4 ${cSky}`} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className={`text-xs font-semibold ${cTextPrimary} flex items-center gap-1.5`}>
-                  <span>Idratazione Oggi</span>
-                  <span className={`text-[11px] font-bold ${cSky}`}>
-                    {todayWaterTotal} / {todayWaterTarget} ml
-                  </span>
-                </div>
-                <div className={`w-full max-w-[220px] h-1.5 ${isLight ? 'bg-slate-200' : 'bg-slate-950'} rounded-full mt-1.5 overflow-hidden`}>
-                  <div
-                    className="h-full bg-gradient-to-r from-sky-500 to-cyan-400 rounded-full transition-all"
-                    style={{ width: `${Math.min(100, Math.round((todayWaterTotal / (todayWaterTarget || 1)) * 100))}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-            <span className={`text-xs font-semibold ${cSky} flex items-center gap-0.5 shrink-0`}>
-              + Acqua <ChevronRight className="w-3.5 h-3.5" />
-            </span>
-          </button>
-        </div>
-
-        {/* Card Peso Corporeo */}
-        <div className={`${cCard} border rounded-2xl p-4 sm:p-5 flex flex-col justify-between`}>
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 shrink-0">
-                <Scale className={`w-5 h-5 ${cEmerald}`} />
-              </div>
-              <div>
-                <h3 className={`font-semibold text-sm sm:text-base ${cTextPrimary}`}>Peso Corporeo</h3>
-                <p className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Check-in settimanale</p>
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                setActiveTab('nutrition');
-                setNutritionSubTab('weight');
-              }}
-              className={`text-xs ${cEmerald} hover:underline flex items-center gap-0.5 font-semibold shrink-0 py-1`}
-            >
-              Dettagli <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {latestWeight ? (
-            <div className="flex items-baseline gap-3 mb-3">
-              <span className={`text-2xl sm:text-3xl font-bold ${cTextPrimary}`}>{latestWeight.weight} kg</span>
-              {weightDeltaTotal !== null && (
-                <span
-                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                    Number(weightDeltaTotal) <= 0
-                      ? `bg-emerald-500/20 ${cEmerald}`
-                      : `bg-amber-500/20 ${cAmber}`
-                  }`}
-                >
-                  {Number(weightDeltaTotal) > 0 ? `+${weightDeltaTotal}` : weightDeltaTotal} kg tot
-                </span>
-              )}
-            </div>
-          ) : (
-            <p className={`text-sm ${cTextSecondary} mb-3`}>Nessuna pesata registrata</p>
-          )}
-
-          {renderWeightChart(135)}
-        </div>
-      </div>
-    ),
-
-    workoutsCard: renderReorderWrapper(
-      'dashboard',
-      'workoutsCard',
-      'Schede Allenamento',
-      <div className={`${cCard} border rounded-2xl p-4 sm:p-5`}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-500/20 border border-indigo-400/35 shrink-0">
-              <Dumbbell className={`w-5 h-5 ${cIndigo}`} />
-            </div>
-            <div>
-              <h3 className={`font-semibold text-sm sm:text-base ${cTextPrimary}`}>
-                Schede Allenamento (3x Settimana)
-              </h3>
-              <p className={`text-[11px] sm:text-xs ${cTextSecondary}`}>
-                Manubri + Corpo Libero • Tocca una sessione per iniziare
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-3.5">
-          {data.workouts.map((wo) => (
-            <div
-              key={wo.id}
-              className={`${cInner} border hover:border-indigo-400/60 rounded-xl p-3.5 sm:p-4 flex flex-col justify-between transition`}
-            >
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className={`text-xs font-bold uppercase tracking-wider ${cIndigo} bg-indigo-500/20 px-2 py-0.5 rounded-md`}>
-                    {wo.dayLabel}
-                  </span>
-                  <span className={`text-xs font-medium ${cTextSecondary}`}>{wo.exercises.length} esercizi</span>
-                </div>
-                <h4 className={`font-semibold text-base ${cTextPrimary}`}>{wo.title}</h4>
-                <p className={`text-xs ${cTextSecondary} mt-1 line-clamp-2`}>{wo.focus}</p>
-              </div>
-
-              <button
-                onClick={() => {
-                  setActiveWorkoutId(wo.id);
-                  setWorkoutMode('live');
-                  setIsEditingWorkoutTitle(false);
-                  setActiveTab('workout');
-                }}
-                className="mt-4 w-full py-3 sm:py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 transition shadow-sm"
-              >
-                <Play className="w-3.5 h-3.5 fill-current" /> Inizia Workout
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-    ),
   };
 
   // --- BLOCCHI PER ALIMENTAZIONE ---
@@ -3529,50 +3237,34 @@ export default function App() {
           </div>
         </div>
 
-        {/* BARRA NAVIGAZIONE FULL-WIDTH */}
-        <nav className="w-full px-3 sm:px-6 lg:px-8 pb-2.5 grid grid-cols-3 sm:flex gap-1.5 sm:gap-2">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition ${
-              activeTab === 'dashboard'
-                ? isLight
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'bg-slate-800 text-white shadow-sm border border-slate-600'
-                : isLight
-                ? 'text-slate-600 hover:text-slate-950 hover:bg-slate-100'
-                : 'text-slate-300 hover:text-white hover:bg-slate-900'
-            }`}
-          >
-            <LayoutDashboard className={`w-4 h-4 ${cSky} shrink-0`} />
-            <span className="truncate">Dashboard</span>
-          </button>
-
+        {/* BARRA NAVIGAZIONE DUE SEZIONI PRINCIPALI */}
+        <nav className="w-full px-3 sm:px-6 lg:px-8 pb-2.5 grid grid-cols-2 sm:flex gap-2">
           <button
             onClick={() => setActiveTab('nutrition')}
-            className={`flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition ${
+            className={`flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold transition ${
               activeTab === 'nutrition'
-                ? `bg-emerald-500/20 ${cEmerald} border border-emerald-400/50`
+                ? `bg-emerald-500/20 ${cEmerald} border border-emerald-400/50 shadow-sm`
                 : isLight
-                ? 'text-slate-600 hover:text-slate-950 hover:bg-slate-100'
-                : 'text-slate-300 hover:text-white hover:bg-slate-900'
+                ? 'text-slate-600 hover:text-slate-950 hover:bg-slate-100 border border-transparent'
+                : 'text-slate-300 hover:text-white hover:bg-slate-900 border border-transparent'
             }`}
           >
             <Utensils className={`w-4 h-4 ${cEmerald} shrink-0`} />
-            <span className="truncate">Dieta &amp; Peso</span>
+            <span>Dieta &amp; Peso</span>
           </button>
 
           <button
             onClick={() => setActiveTab('workout')}
-            className={`flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition ${
+            className={`flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold transition ${
               activeTab === 'workout'
-                ? `bg-indigo-500/20 ${cIndigo} border border-indigo-400/50`
+                ? `bg-indigo-500/20 ${cIndigo} border border-indigo-400/50 shadow-sm`
                 : isLight
-                ? 'text-slate-600 hover:text-slate-950 hover:bg-slate-100'
-                : 'text-slate-300 hover:text-white hover:bg-slate-900'
+                ? 'text-slate-600 hover:text-slate-950 hover:bg-slate-100 border border-transparent'
+                : 'text-slate-300 hover:text-white hover:bg-slate-900 border border-transparent'
             }`}
           >
             <Dumbbell className={`w-4 h-4 ${cIndigo} shrink-0`} />
-            <span className="truncate">Workout (3x)</span>
+            <span>Workout (3x)</span>
           </button>
         </nav>
       </header>
@@ -3769,12 +3461,6 @@ export default function App() {
 
       {/* MAIN CONTENT FULL-WIDTH */}
       <main className="w-full px-3 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-5 sm:space-y-6">
-        {activeTab === 'dashboard' && (
-          <div className="space-y-4 sm:space-y-6">
-            {data.layout.dashboard.map((secId) => dashboardSections[secId] || null)}
-          </div>
-        )}
-
         {activeTab === 'nutrition' && (
           <div className="space-y-4 sm:space-y-5">
             {data.layout.nutrition.map((secId) => {
