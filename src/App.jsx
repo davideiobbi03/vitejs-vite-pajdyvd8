@@ -19,6 +19,7 @@ import {
   Upload,
   Settings,
   ChevronRight,
+  ChevronLeft,
   Volume2,
   VolumeX,
   Edit3,
@@ -41,6 +42,8 @@ import {
   Droplet,
   Sparkles,
   Zap,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://qwxfjrunqhssoonapfcl.supabase.co';
@@ -289,6 +292,26 @@ function getTodayDayKey(dateObj = new Date()) {
   return jsDay === 0 ? 'Dom' : DAYS[jsDay - 1];
 }
 
+// Restituisce i 7 giorni della settimana Lunedì-Domenica che contiene `baseIsoDate`
+function getWeekDaysFromDate(baseIsoDate) {
+  const [y, m, dNum] = baseIsoDate.split('-').map(Number);
+  const refDate = new Date(y, m - 1, dNum);
+  const jsDay = refDate.getDay(); // 0 = Dom, 1 = Lun ... 6 = Sab
+  const diffToMonday = jsDay === 0 ? -6 : 1 - jsDay;
+  const monday = new Date(y, m - 1, dNum + diffToMonday);
+
+  return Array.from({ length: 7 }).map((_, idx) => {
+    const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + idx);
+    const iso = getLocalIsoDate(d);
+    return {
+      iso,
+      dayShort: DAYS[idx],
+      dayNum: iso.slice(8, 10),
+      monthShort: d.toLocaleDateString('it-IT', { month: 'short' }),
+    };
+  });
+}
+
 // Estrae i grammi di riferimento dal nome dell'alimento (es. "Pasta (120g)" -> 120)
 function extractBaseGrams(food) {
   if (!food) return null;
@@ -386,6 +409,41 @@ export default function App() {
   const [bgModalOpen, setBgModalOpen] = useState(false);
   const [customImageInput, setCustomImageInput] = useState('');
   const bgFileInputRef = useRef(null);
+
+  // Stato Fullscreen API (Desktop / Android / iPadOS)
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement || document.webkitFullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('webkitfullscreenchange', handleFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFsChange);
+      document.removeEventListener('webkitfullscreenchange', handleFsChange);
+    };
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      const docEl = document.documentElement;
+      const isCurrentlyFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+      if (!isCurrentlyFs) {
+        if (docEl.requestFullscreen) {
+          await docEl.requestFullscreen();
+        } else if (docEl.webkitRequestFullscreen) {
+          await docEl.webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          await document.webkitExitFullscreen();
+        }
+      }
+    } catch (e) {}
+  };
 
   const toggleTheme = () => {
     setData((prev) => ({
@@ -566,7 +624,6 @@ export default function App() {
       todayIsoRef.current = currentIso;
       setTodayIso(currentIso);
 
-      // Se l'utente stava visualizzando "oggi", avanza automaticamente al nuovo giorno
       setSelectedDay((curr) => (curr === prevDayKey ? nextDayKey : curr));
       setSelectedWaterDate((curr) => (curr === prevIso ? currentIso : curr));
       setNewWeightDate((curr) => (curr === prevIso ? currentIso : curr));
@@ -574,10 +631,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // 1) Controlla periodicamente (ogni 15s) per catturare la mezzanotte esatta anche con browser aperto
     const intervalId = setInterval(syncRolloverDate, 15000);
 
-    // 2) Calcola anche un timeout preciso al millisecondo fino alla prossima mezzanotte locale
     const now = new Date();
     const nextMidnight = new Date(
       now.getFullYear(),
@@ -591,7 +646,6 @@ export default function App() {
     const msToMidnight = Math.max(1000, nextMidnight.getTime() - now.getTime());
     const midnightTimeout = setTimeout(syncRolloverDate, msToMidnight);
 
-    // 3) Controlla subito quando l'app/telefono viene riattivato dallo stand-by
     const handleResume = () => {
       if (document.visibilityState === 'visible') {
         syncRolloverDate();
@@ -705,7 +759,7 @@ export default function App() {
   const [mealName, setMealName] = useState('');
   const [mealItems, setMealItems] = useState([]);
   const [selectedFoodToAdd, setSelectedFoodToAdd] = useState('');
-  const [qtyInputMode, setQtyInputMode] = useState('portion'); // 'portion' | 'grams'
+  const [qtyInputMode, setQtyInputMode] = useState('portion');
   const [selectedFoodQty, setSelectedFoodQty] = useState('1');
   const [selectedFoodGrams, setSelectedFoodGrams] = useState('100');
   const [newWeight, setNewWeight] = useState('');
@@ -936,6 +990,12 @@ export default function App() {
         ...patch,
       },
     }));
+  };
+
+  const shiftSelectedWaterWeek = (deltaWeeks) => {
+    const [y, m, dNum] = selectedWaterDate.split('-').map(Number);
+    const shifted = new Date(y, m - 1, dNum + deltaWeeks * 7);
+    setSelectedWaterDate(getLocalIsoDate(shifted));
   };
 
   const toggleSetCompleted = (exercise, setIndex) => {
@@ -1223,7 +1283,7 @@ export default function App() {
     if (selectedWaterDate !== todayIso) {
       return {
         tone: 'neutral',
-        text: `Giornata archiviata: mancavano ${waterRemainingMl} ml per completare l'obiettivo di ${selectedDateWaterTarget} ml.`,
+        text: `Giornata selezionata (${selectedWaterDate}): mancavano ${waterRemainingMl} ml per completare l'obiettivo di ${selectedDateWaterTarget} ml.`,
       };
     }
     const nowHour = new Date().getHours();
@@ -1250,23 +1310,20 @@ export default function App() {
     };
   };
 
-  // Ultimi 7 giorni ancorati a todayIso (si aggiorna automaticamente allo scattare della mezzanotte)
-  const last7WaterDays = Array.from({ length: 7 }).map((_, idx) => {
-    const [y, m, dNum] = todayIso.split('-').map(Number);
-    const d = new Date(y, m - 1, dNum - (6 - idx));
-    const iso = getLocalIsoDate(d);
-    const dayShort = d.getDay() === 0 ? 'Dom' : DAYS[d.getDay() - 1];
-    const total = getWaterTotalForDate(iso);
-    const target = getWaterTargetForDate(iso);
+  // Settimana fissa Lunedì–Domenica della data selezionata
+  const currentWeekWaterDays = getWeekDaysFromDate(selectedWaterDate).map((d) => {
+    const total = getWaterTotalForDate(d.iso);
+    const target = getWaterTargetForDate(d.iso);
     return {
-      iso,
-      dayShort,
-      dayNum: iso.slice(8, 10),
+      ...d,
       total,
       target,
       pct: Math.min(100, Math.round((total / (target || 1)) * 100)),
     };
   });
+
+  const isViewingCurrentWeek = currentWeekWaterDays.some((d) => d.iso === todayIso);
+  const weekRangeLabel = `${currentWeekWaterDays[0].dayNum} ${currentWeekWaterDays[0].monthShort} – ${currentWeekWaterDays[6].dayNum} ${currentWeekWaterDays[6].monthShort}`;
 
   const totalSetsInWorkout = currentWorkout
     ? currentWorkout.exercises.reduce((sum, ex) => sum + ex.sets, 0)
@@ -1507,7 +1564,7 @@ export default function App() {
               <button
                 key={d}
                 onClick={() => setSelectedDay(d)}
-                className={`py-2 sm:px-3 sm:py-1.5 rounded-lg text-xs font-semibold text-center transition ${
+                className={`py-2 sm:px-3.5 sm:py-1.5 rounded-lg text-xs font-semibold text-center transition ${
                   selectedDay === d
                     ? 'bg-emerald-500 text-white shadow-sm'
                     : isLight
@@ -1612,18 +1669,18 @@ export default function App() {
             }}
             className={`w-full ${cInner} hover:border-sky-400/60 border rounded-xl p-2.5 sm:p-3 text-left transition flex items-center justify-between gap-3`}
           >
-            <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
               <div className="p-1.5 rounded-lg bg-sky-500/20 border border-sky-400/35 shrink-0">
                 <Droplets className={`w-4 h-4 ${cSky}`} />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className={`text-xs font-semibold ${cTextPrimary} flex items-center gap-1.5`}>
                   <span>Idratazione Oggi</span>
                   <span className={`text-[11px] font-bold ${cSky}`}>
                     {todayWaterTotal} / {todayWaterTarget} ml
                   </span>
                 </div>
-                <div className={`w-36 sm:w-44 h-1.5 ${isLight ? 'bg-slate-200' : 'bg-slate-950'} rounded-full mt-1.5 overflow-hidden`}>
+                <div className={`w-full max-w-[220px] h-1.5 ${isLight ? 'bg-slate-200' : 'bg-slate-950'} rounded-full mt-1.5 overflow-hidden`}>
                   <div
                     className="h-full bg-gradient-to-r from-sky-500 to-cyan-400 rounded-full transition-all"
                     style={{ width: `${Math.min(100, Math.round((todayWaterTotal / (todayWaterTarget || 1)) * 100))}%` }}
@@ -1755,7 +1812,7 @@ export default function App() {
                 <button
                   key={d}
                   onClick={() => setSelectedDay(d)}
-                  className={`py-2 px-1 sm:px-3 rounded-xl text-xs font-semibold flex flex-col items-center border transition ${
+                  className={`py-2 px-1 sm:px-3.5 rounded-xl text-xs font-semibold flex flex-col items-center border transition ${
                     selectedDay === d
                       ? `bg-emerald-500/20 border-emerald-400 ${cEmerald}`
                       : `${cInner} ${cTextSecondary}`
@@ -1823,7 +1880,7 @@ export default function App() {
       'planner',
       'mealSlotsGrid',
       'Slot Pasti Giornalieri',
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5 sm:gap-4">
         {MEAL_SLOTS.map((slot) => {
           const assignedMealIds = data.weeklyPlan[selectedDay]?.[slot] || [];
           return (
@@ -1944,7 +2001,6 @@ export default function App() {
                 1. Scegli Alimento &amp; 2. Imposta Quantità
               </label>
 
-              {/* Selettore unità Porzioni vs Grammi */}
               <div className={`inline-flex rounded-lg p-0.5 border ${isLight ? 'bg-slate-200/80 border-slate-300' : 'bg-slate-950 border-slate-700'}`}>
                 <button
                   type="button"
@@ -2084,7 +2140,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Anteprima macro della quantità scelta prima di aggiungere */}
               {activeComposerFood && computedPreviewMultiplier > 0 && (
                 <div className={`text-[11px] ${cTextSecondary} flex flex-wrap items-center justify-between gap-2 pt-1 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/70'}`}>
                   <span>
@@ -2206,7 +2261,7 @@ export default function App() {
         {data.meals.length === 0 ? (
           <p className={`text-xs ${cTextSecondary} italic py-6 text-center`}>Nessun pasto composto salvato.</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[540px] overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[540px] overflow-y-auto pr-1">
             {data.meals.map((meal) => {
               const m = getMealMacros(meal);
               return (
@@ -2359,7 +2414,7 @@ export default function App() {
         {data.foods.length === 0 ? (
           <p className={`text-xs ${cTextSecondary} italic py-6 text-center`}>Nessun alimento salvato nel database.</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-[500px] overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[500px] overflow-y-auto pr-1">
             {data.foods.map((food) => (
               <div
                 key={food.id}
@@ -2658,46 +2713,85 @@ export default function App() {
       'waterHistory',
       'Andamento Settimanale & Registro Giornaliero',
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Grafico a barre ultimi 7 giorni */}
+        {/* Grafico a barre Settimana Fissa Lunedì - Domenica */}
         <div className={`${cCard} border rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-4`}>
-          <div>
-            <h3 className={`font-semibold text-base ${cTextPrimary}`}>Ultimi 7 Giorni</h3>
-            <p className={`text-xs ${cTextSecondary}`}>Tocca un giorno per visualizzare o modificare le bevute</p>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h3 className={`font-semibold text-base ${cTextPrimary}`}>Settimana Idratazione</h3>
+              <p className={`text-xs ${cTextSecondary} mt-0.5`}>
+                {weekRangeLabel} • Tocca un giorno per gestirlo
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1 shrink-0">
+              {!isViewingCurrentWeek && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedWaterDate(todayIso)}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-semibold bg-sky-500/20 ${cSky} hover:bg-sky-500/30 transition mr-0.5`}
+                >
+                  Oggi
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => shiftSelectedWaterWeek(-1)}
+                title="Settimana precedente"
+                className={`p-1.5 rounded-lg border transition ${cInner} ${cTextPrimary} hover:border-sky-400`}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => shiftSelectedWaterWeek(1)}
+                title="Settimana successiva"
+                className={`p-1.5 rounded-lg border transition ${cInner} ${cTextPrimary} hover:border-sky-400`}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-7 gap-1.5 sm:gap-2 items-end h-40 pt-4">
-            {last7WaterDays.map((day) => {
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2 items-stretch min-h-[168px] pt-1">
+            {currentWeekWaterDays.map((day) => {
               const isSelected = day.iso === selectedWaterDate;
+              const isToday = day.iso === todayIso;
               const isGoalMet = day.total >= day.target && day.total > 0;
               return (
                 <button
                   key={day.iso}
                   type="button"
                   onClick={() => setSelectedWaterDate(day.iso)}
-                  className={`h-full flex flex-col items-center justify-end gap-1.5 p-1 rounded-xl transition ${
+                  className={`flex flex-col items-center justify-between gap-1.5 py-2 px-1 rounded-xl border transition ${
                     isSelected
                       ? isLight
-                        ? 'bg-sky-100/80 ring-1 ring-sky-400'
-                        : 'bg-sky-500/15 ring-1 ring-sky-400/60'
-                      : ''
+                        ? 'bg-sky-50 border-sky-400 ring-1 ring-sky-400/50'
+                        : 'bg-sky-500/15 border-sky-400 ring-1 ring-sky-400/40'
+                      : 'border-transparent hover:border-slate-400/30'
                   }`}
                 >
-                  <span className={`text-[10px] font-bold ${isGoalMet ? cEmerald : cTextSecondary}`}>
+                  <span className={`text-[10px] sm:text-[11px] font-bold leading-none ${isGoalMet ? cEmerald : cTextSecondary}`}>
                     {day.total > 0 ? `${(day.total / 1000).toFixed(1)}L` : '0'}
                   </span>
-                  <div className={`w-full h-24 ${isLight ? 'bg-slate-200' : 'bg-slate-950'} rounded-lg flex items-end overflow-hidden p-0.5`}>
+
+                  <div className={`w-full flex-1 min-h-[84px] ${isLight ? 'bg-slate-200/85' : 'bg-slate-950'} rounded-lg flex items-end overflow-hidden p-0.5`}>
                     <div
                       className={`w-full rounded-md transition-all duration-300 ${
                         isGoalMet
                           ? 'bg-gradient-to-t from-emerald-500 to-teal-400'
                           : 'bg-gradient-to-t from-sky-500 to-cyan-400'
                       }`}
-                      style={{ height: `${Math.max(day.total > 0 ? 10 : 0, day.pct)}%` }}
+                      style={{ height: `${Math.max(day.total > 0 ? 12 : 0, day.pct)}%` }}
                     />
                   </div>
+
                   <div className="text-center leading-tight">
-                    <div className={`text-[11px] font-semibold ${isSelected ? cSky : cTextPrimary}`}>{day.dayShort}</div>
-                    <div className={`text-[10px] ${cTextSecondary}`}>{day.dayNum}</div>
+                    <div className={`text-[11px] font-bold ${isSelected || isToday ? cSky : cTextPrimary}`}>
+                      {day.dayShort}
+                    </div>
+                    <div className={`text-[10px] ${isToday ? `font-bold ${cSky}` : cTextSecondary}`}>
+                      {day.dayNum}
+                    </div>
                   </div>
                 </button>
               );
@@ -3108,7 +3202,6 @@ export default function App() {
                   {ex.notes && <p className={`text-xs ${cTextSecondary} italic mt-1`}>Nota: {ex.notes}</p>}
                 </div>
 
-                {/* Controllo carico touch-friendly */}
                 <div className="flex items-center justify-between sm:justify-end gap-2 pt-1 sm:pt-0">
                   {ex.weight > 0 || workoutMode === 'edit' ? (
                     <div className={`flex items-center ${cInner} border rounded-xl p-1`}>
@@ -3275,19 +3368,19 @@ export default function App() {
         ...getWrapperBackgroundStyle(),
         colorScheme: isLight ? 'light' : 'dark',
       }}
-      className={`min-h-screen font-sans selection:bg-emerald-500/30 pb-44 sm:pb-32 transition-colors duration-200 ${
+      className={`min-h-[100dvh] w-full overflow-x-hidden font-sans selection:bg-emerald-500/30 pb-44 sm:pb-32 transition-colors duration-200 ${
         !hasCustomBg ? (isLight ? 'bg-slate-100' : 'bg-slate-950') : ''
       } ${isLight ? 'text-slate-900' : 'text-white'}`}
     >
-      {/* HEADER */}
+      {/* HEADER FULL-WIDTH */}
       <header
-        className={`sticky top-0 z-30 backdrop-blur-md border-b transition-colors pt-[env(safe-area-inset-top)] ${
+        className={`sticky top-0 z-30 w-full backdrop-blur-md border-b transition-colors pt-[env(safe-area-inset-top)] ${
           isLight
             ? 'bg-white/92 border-slate-200'
             : 'bg-slate-950/92 border-slate-800'
         }`}
       >
-        <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between gap-2">
+        <div className="w-full px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-emerald-500/15 shrink-0">
               <Flame className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
@@ -3303,6 +3396,21 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            <button
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Esci da schermo intero' : 'Schermo intero'}
+              className={`flex items-center justify-center gap-1.5 text-xs p-2 sm:px-2.5 sm:py-1.5 rounded-lg border transition ${
+                isFullscreen
+                  ? `bg-sky-500/20 border-sky-400/50 ${cSky} font-semibold`
+                  : isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
+                  : 'bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-200'
+              }`}
+            >
+              {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              <span className="hidden lg:inline">{isFullscreen ? 'Riduci' : 'Schermo intero'}</span>
+            </button>
+
             <button
               onClick={() => {
                 setCustomImageInput(
@@ -3421,8 +3529,8 @@ export default function App() {
           </div>
         </div>
 
-        {/* BARRA NAVIGAZIONE RESPONSIVE */}
-        <nav className="max-w-5xl mx-auto px-3 sm:px-4 pb-2.5 grid grid-cols-3 sm:flex gap-1.5 sm:gap-2">
+        {/* BARRA NAVIGAZIONE FULL-WIDTH */}
+        <nav className="w-full px-3 sm:px-6 lg:px-8 pb-2.5 grid grid-cols-3 sm:flex gap-1.5 sm:gap-2">
           <button
             onClick={() => setActiveTab('dashboard')}
             className={`flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition ${
@@ -3471,7 +3579,7 @@ export default function App() {
 
       {/* PANNELLO PERSONALIZZAZIONE SFONDO */}
       {bgModalOpen && (
-        <div className="max-w-5xl mx-auto px-3 sm:px-4 pt-4">
+        <div className="w-full px-3 sm:px-6 lg:px-8 pt-4">
           <div className={`${cCard} border border-indigo-400/50 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -3633,7 +3741,7 @@ export default function App() {
 
       {/* BANNER INFORMATIVO MODALITÀ RIORDINO */}
       {reorderMode && (
-        <div className="max-w-5xl mx-auto px-3 sm:px-4 pt-4">
+        <div className="w-full px-3 sm:px-6 lg:px-8 pt-4">
           <div
             className={`rounded-2xl px-4 py-3 border flex flex-wrap items-center justify-between gap-2 text-xs ${
               isLight
@@ -3659,8 +3767,8 @@ export default function App() {
         </div>
       )}
 
-      {/* MAIN CONTENT */}
-      <main className="max-w-5xl mx-auto px-3 sm:px-4 pt-4 sm:pt-6 space-y-5 sm:space-y-6">
+      {/* MAIN CONTENT FULL-WIDTH */}
+      <main className="w-full px-3 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-5 sm:space-y-6">
         {activeTab === 'dashboard' && (
           <div className="space-y-4 sm:space-y-6">
             {data.layout.dashboard.map((secId) => dashboardSections[secId] || null)}
@@ -3824,16 +3932,15 @@ export default function App() {
         )}
       </main>
 
-      {/* BARRA FLOATING TIMER RESPONSIVE */}
+      {/* BARRA FLOATING TIMER FULL-WIDTH */}
       <div
-        className={`fixed bottom-0 inset-x-0 z-40 backdrop-blur-lg border-t shadow-2xl transition-colors pb-[env(safe-area-inset-bottom)] ${
+        className={`fixed bottom-0 inset-x-0 z-40 w-full backdrop-blur-lg border-t shadow-2xl transition-colors pb-[env(safe-area-inset-bottom)] ${
           isLight
             ? 'bg-white/95 border-slate-200'
             : 'bg-slate-900/95 border-slate-700'
         }`}
       >
-        <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2 sm:py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-2">
-          {/* Riga 1 su Mobile: Display Tempo + Controlli */}
+        <div className="w-full px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-2">
           <div className="flex items-center justify-between md:justify-start gap-2.5">
             <div className="flex items-center gap-2">
               <div
@@ -3913,7 +4020,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Riga 2 su Mobile: Preset Rapidi Serie vs Cambio Esercizio */}
           <div className="flex items-center justify-between md:justify-end gap-1.5 overflow-x-auto">
             <div className="flex items-center gap-1">
               <span className={`text-[10px] uppercase font-bold ${cTextSecondary} mr-0.5`}>
