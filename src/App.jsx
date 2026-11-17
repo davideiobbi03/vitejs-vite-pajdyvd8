@@ -43,6 +43,8 @@ import {
   Zap,
   Maximize2,
   Minimize2,
+  Calculator,
+  PieChart,
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://qwxfjrunqhssoonapfcl.supabase.co';
@@ -212,6 +214,15 @@ const INITIAL_WATER_SETTINGS = {
   workoutDates: {},
 };
 
+const INITIAL_BODY_PROFILE = {
+  heightCm: 178,
+  age: 23,
+  sex: 'M',
+  activityFactor: 1.55, // Moderatamente attivo (3x workout + stile di vita attivo)
+  goal: 'lean_bulk', // 'lean_bulk' (+200 kcal salute & massa pulita), 'recomp' (mantenimento), 'bulk' (+350 kcal)
+  autoSyncWeight: true,
+};
+
 const INITIAL_WORKOUTS = [
   {
     id: 'wo-a',
@@ -255,10 +266,10 @@ const INITIAL_WORKOUTS = [
 ];
 
 const INITIAL_TARGETS = {
-  kcal: 2550,
-  p: 175,
-  c: 295,
-  g: 72,
+  kcal: 2750,
+  p: 155,
+  c: 365,
+  g: 74,
 };
 
 const INITIAL_LAYOUT = {
@@ -273,7 +284,45 @@ const INITIAL_LAYOUT = {
 
 const STORAGE_KEY = 'fittrack_pro_data_v1';
 
-// Usa sempre il fuso orario locale per evitare lo sfasamento UTC a mezzanotte
+// Calcolo scientifico Mifflin-St Jeor + ripartizione macro per salute e ipertrofia pulita
+function calculateSmartNutritionTargets(weightKg, profile = INITIAL_BODY_PROFILE) {
+  const w = Math.max(35, Number(weightKg) || 75);
+  const h = Math.max(120, Number(profile.heightCm) || 178);
+  const age = Math.max(15, Number(profile.age) || 23);
+  const sex = profile.sex === 'F' ? 'F' : 'M';
+  const activity = Number(profile.activityFactor) || 1.55;
+
+  // BMR Mifflin-St Jeor
+  const bmr =
+    sex === 'M'
+      ? 10 * w + 6.25 * h - 5 * age + 5
+      : 10 * w + 6.25 * h - 5 * age - 161;
+
+  const tdee = bmr * activity;
+
+  let surplus = 200; // Salute + aumento graduale massa pulita
+  if (profile.goal === 'recomp') surplus = 0;
+  if (profile.goal === 'bulk') surplus = 350;
+
+  const targetKcal = Math.round((tdee + surplus) / 10) * 10;
+  // Proteine: 2.0 g/kg per sintesi proteica ottimale senza eccessi
+  const p = Math.round(w * 2.0);
+  // Grassi: ~0.95 g/kg per equilibrio ormonale e salute cardiovascolare
+  const g = Math.round(w * 0.95);
+  // Carboidrati: il resto delle calorie per energia in allenamento e recupero
+  const remainingKcal = Math.max(200, targetKcal - p * 4 - g * 9);
+  const c = Math.round(remainingKcal / 4);
+
+  return {
+    bmr: Math.round(bmr),
+    tdee: Math.round(tdee),
+    kcal: targetKcal,
+    p,
+    c,
+    g,
+  };
+}
+
 function getLocalIsoDate(dateObj = new Date()) {
   const year = dateObj.getFullYear();
   const month = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -290,11 +339,10 @@ function getTodayDayKey(dateObj = new Date()) {
   return jsDay === 0 ? 'Dom' : DAYS[jsDay - 1];
 }
 
-// Restituisce i 7 giorni della settimana Lunedì-Domenica che contiene `baseIsoDate`
 function getWeekDaysFromDate(baseIsoDate) {
   const [y, m, dNum] = baseIsoDate.split('-').map(Number);
   const refDate = new Date(y, m - 1, dNum);
-  const jsDay = refDate.getDay(); // 0 = Dom, 1 = Lun ... 6 = Sab
+  const jsDay = refDate.getDay();
   const diffToMonday = jsDay === 0 ? -6 : 1 - jsDay;
   const monday = new Date(y, m - 1, dNum + diffToMonday);
 
@@ -310,7 +358,6 @@ function getWeekDaysFromDate(baseIsoDate) {
   });
 }
 
-// Estrae i grammi di riferimento dal nome dell'alimento (es. "Pasta (120g)" -> 120)
 function extractBaseGrams(food) {
   if (!food) return null;
   if (typeof food.baseGrams === 'number' && food.baseGrams > 0) return food.baseGrams;
@@ -327,6 +374,7 @@ function normalizeData(raw) {
   const layout = safe.layout && typeof safe.layout === 'object' ? safe.layout : {};
   const bg = safe.background && typeof safe.background === 'object' ? safe.background : {};
   const ws = safe.waterSettings && typeof safe.waterSettings === 'object' ? safe.waterSettings : {};
+  const bp = safe.bodyProfile && typeof safe.bodyProfile === 'object' ? safe.bodyProfile : {};
 
   return {
     foods: Array.isArray(safe.foods) ? safe.foods : INITIAL_FOODS,
@@ -340,6 +388,14 @@ function normalizeData(raw) {
       workoutBonusMl: typeof ws.workoutBonusMl === 'number' ? ws.workoutBonusMl : INITIAL_WATER_SETTINGS.workoutBonusMl,
       manualTargetMl: typeof ws.manualTargetMl === 'number' ? ws.manualTargetMl : INITIAL_WATER_SETTINGS.manualTargetMl,
       workoutDates: ws.workoutDates && typeof ws.workoutDates === 'object' ? ws.workoutDates : {},
+    },
+    bodyProfile: {
+      heightCm: typeof bp.heightCm === 'number' ? bp.heightCm : INITIAL_BODY_PROFILE.heightCm,
+      age: typeof bp.age === 'number' ? bp.age : INITIAL_BODY_PROFILE.age,
+      sex: bp.sex === 'F' ? 'F' : 'M',
+      activityFactor: typeof bp.activityFactor === 'number' ? bp.activityFactor : INITIAL_BODY_PROFILE.activityFactor,
+      goal: ['lean_bulk', 'recomp', 'bulk'].includes(bp.goal) ? bp.goal : INITIAL_BODY_PROFILE.goal,
+      autoSyncWeight: typeof bp.autoSyncWeight === 'boolean' ? bp.autoSyncWeight : INITIAL_BODY_PROFILE.autoSyncWeight,
     },
     workouts: Array.isArray(safe.workouts) && safe.workouts.length > 0 ? safe.workouts : INITIAL_WORKOUTS,
     targets: safe.targets && typeof safe.targets === 'object' ? { ...INITIAL_TARGETS, ...safe.targets } : INITIAL_TARGETS,
@@ -400,7 +456,6 @@ export default function App() {
   const [customImageInput, setCustomImageInput] = useState('');
   const bgFileInputRef = useRef(null);
 
-  // Stato Fullscreen API (Desktop / Android / iPadOS)
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -594,7 +649,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('nutrition');
   const [nutritionSubTab, setNutritionSubTab] = useState('planner');
 
-  // Data corrente reattiva (si aggiorna automaticamente allo scoccare delle 00:00 o al risveglio dell'app)
   const [todayIso, setTodayIso] = useState(() => getTodayIso());
   const todayIsoRef = useRef(todayIso);
 
@@ -757,8 +811,13 @@ export default function App() {
   const [selectedFoodGrams, setSelectedFoodGrams] = useState('100');
   const [newWeight, setNewWeight] = useState('');
   const [newWeightNote, setNewWeightNote] = useState('');
+
+  // Stati Calcolatore Fabbisogno Peso + Altezza + Obiettivo
   const [editingTargets, setEditingTargets] = useState(false);
   const [tempTargets, setTempTargets] = useState(data.targets);
+  const [tempBodyProfile, setTempBodyProfile] = useState(data.bodyProfile || INITIAL_BODY_PROFILE);
+  const [calcWeightInput, setCalcWeightInput] = useState('77.2');
+
   const [copyTargetDay, setCopyTargetDay] = useState('Mar');
   const [newExercise, setNewExercise] = useState({
     name: '',
@@ -907,16 +966,27 @@ export default function App() {
     e.preventDefault();
     const val = parseFloat(newWeight.replace(',', '.'));
     if (isNaN(val) || val <= 0) return;
+    const fixedWeight = Number(val.toFixed(1));
     const entry = {
       id: 'w-' + Date.now(),
       date: newWeightDate,
-      weight: Number(val.toFixed(1)),
+      weight: fixedWeight,
       note: newWeightNote.trim(),
     };
-    setData((prev) => ({
-      ...prev,
-      weights: [...prev.weights, entry].sort((a, b) => a.date.localeCompare(b.date)),
-    }));
+    setData((prev) => {
+      const nextWeights = [...prev.weights, entry].sort((a, b) => a.date.localeCompare(b.date));
+      const newestWeight = nextWeights[nextWeights.length - 1]?.weight ?? fixedWeight;
+      let nextTargets = prev.targets;
+      if (prev.bodyProfile?.autoSyncWeight) {
+        const calc = calculateSmartNutritionTargets(newestWeight, prev.bodyProfile);
+        nextTargets = { kcal: calc.kcal, p: calc.p, c: calc.c, g: calc.g };
+      }
+      return {
+        ...prev,
+        weights: nextWeights,
+        targets: nextTargets,
+      };
+    });
     setNewWeight('');
     setNewWeightNote('');
   };
@@ -1201,6 +1271,7 @@ export default function App() {
         weights: INITIAL_WEIGHTS,
         waterLogs: [],
         waterSettings: INITIAL_WATER_SETTINGS,
+        bodyProfile: INITIAL_BODY_PROFILE,
         workouts: INITIAL_WORKOUTS,
         targets: INITIAL_TARGETS,
         theme: prev.theme,
@@ -1223,6 +1294,12 @@ export default function App() {
     latestWeight && prevWeight ? (latestWeight.weight - prevWeight.weight).toFixed(1) : null;
   const weightDeltaTotal =
     latestWeight && firstWeight ? (latestWeight.weight - firstWeight.weight).toFixed(1) : null;
+
+  // Anteprima live nel calcolatore Fabbisogno Peso + Altezza
+  const liveCalcPreview = calculateSmartNutritionTargets(
+    parseFloat(String(calcWeightInput).replace(',', '.')) || (latestWeight ? latestWeight.weight : 75),
+    tempBodyProfile
+  );
 
   // Calcoli intelligenti Idratazione
   const getWaterTargetForDate = (dateStr) => {
@@ -1286,7 +1363,6 @@ export default function App() {
     };
   };
 
-  // Settimana fissa Lunedì–Domenica della data selezionata
   const currentWeekWaterDays = getWeekDaysFromDate(selectedWaterDate).map((d) => {
     const total = getWaterTotalForDate(d.iso);
     const target = getWaterTargetForDate(d.iso);
@@ -1344,7 +1420,6 @@ export default function App() {
 
   const hasCustomBg = data.background?.type && data.background.type !== 'default';
 
-  // --- PALETTE AD ALTO CONTRASTO PER LIGHT E DARK MODE ---
   const cCard = isLight
     ? hasCustomBg
       ? 'bg-white/92 backdrop-blur-md border-slate-200/90 shadow-sm'
@@ -1375,6 +1450,133 @@ export default function App() {
   const cAmber = isLight ? 'text-amber-600' : 'text-amber-400';
   const cSky = isLight ? 'text-sky-600' : 'text-sky-400';
   const cRose = isLight ? 'text-rose-600' : 'text-rose-400';
+
+  // --- GRAFICO A TORTA (DONUT CHART) DEI MACRO GIORNALIERI ---
+  const renderMacrosPieChart = () => {
+    const pKcal = dayMacros.p * 4;
+    const cKcal = dayMacros.c * 4;
+    const gKcal = dayMacros.g * 9;
+    const totalMacroKcal = pKcal + cKcal + gKcal;
+
+    const hasData = totalMacroKcal > 0;
+    const pPct = hasData ? Math.round((pKcal / totalMacroKcal) * 100) : 0;
+    const gPct = hasData ? Math.round((gKcal / totalMacroKcal) * 100) : 0;
+    const cPct = hasData ? Math.max(0, 100 - pPct - gPct) : 0;
+
+    const radius = 38;
+    const circumference = 2 * Math.PI * radius;
+
+    const pLen = hasData ? (pKcal / totalMacroKcal) * circumference : 0;
+    const cLen = hasData ? (cKcal / totalMacroKcal) * circumference : 0;
+    const gLen = hasData ? (gKcal / totalMacroKcal) * circumference : 0;
+
+    const pOffset = 0;
+    const cOffset = -pLen;
+    const gOffset = -(pLen + cLen);
+
+    const trackStroke = isLight ? '#e2e8f0' : '#1e293b';
+
+    return (
+      <div className={`${cInner} rounded-xl p-3 border flex items-center gap-3.5`}>
+        <div className="relative w-24 h-24 shrink-0 flex items-center justify-center">
+          <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90 overflow-visible">
+            <circle
+              cx="50"
+              cy="50"
+              r={radius}
+              fill="none"
+              stroke={trackStroke}
+              strokeWidth="12"
+            />
+            {hasData && (
+              <>
+                {pLen > 0 && (
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r={radius}
+                    fill="none"
+                    stroke="#38bdf8"
+                    strokeWidth="12"
+                    strokeDasharray={`${pLen} ${circumference}`}
+                    strokeDashoffset={pOffset}
+                    className="transition-all duration-300"
+                  />
+                )}
+                {cLen > 0 && (
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r={radius}
+                    fill="none"
+                    stroke="#fbbf24"
+                    strokeWidth="12"
+                    strokeDasharray={`${cLen} ${circumference}`}
+                    strokeDashoffset={cOffset}
+                    className="transition-all duration-300"
+                  />
+                )}
+                {gLen > 0 && (
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r={radius}
+                    fill="none"
+                    stroke="#fb7185"
+                    strokeWidth="12"
+                    strokeDasharray={`${gLen} ${circumference}`}
+                    strokeDashoffset={gOffset}
+                    className="transition-all duration-300"
+                  />
+                )}
+              </>
+            )}
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+            <span className={`text-xs font-extrabold leading-none ${cTextPrimary}`}>
+              {dayMacros.kcal}
+            </span>
+            <span className={`text-[9px] font-semibold uppercase tracking-wider mt-0.5 ${cTextSecondary}`}>
+              kcal
+            </span>
+          </div>
+        </div>
+
+        <div className="flex-1 min-w-0 space-y-1.5">
+          <div className={`text-[11px] font-semibold flex items-center gap-1 ${cTextSecondary}`}>
+            <PieChart className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="truncate">Ripartizione Macro</span>
+          </div>
+
+          <div className="space-y-1 text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 truncate">
+                <span className="w-2.5 h-2.5 rounded-full bg-sky-400 shrink-0" />
+                <span className={cTextSecondary}>Proteine</span>
+              </span>
+              <span className={`font-bold ${cSky} shrink-0`}>{pPct}%</span>
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 truncate">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0" />
+                <span className={cTextSecondary}>Carbo</span>
+              </span>
+              <span className={`font-bold ${cAmber} shrink-0`}>{cPct}%</span>
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 truncate">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-400 shrink-0" />
+                <span className={cTextSecondary}>Grassi</span>
+              </span>
+              <span className={`font-bold ${cRose} shrink-0`}>{gPct}%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const renderReorderWrapper = (groupKey, sectionId, label, children, extraClass = '') => {
     const list = data.layout?.[groupKey] || INITIAL_LAYOUT[groupKey];
@@ -1510,11 +1712,13 @@ export default function App() {
   };
 
   // --- BLOCCHI PER ALIMENTAZIONE ---
+  const kcalPct = Math.min(100, Math.round((dayMacros.kcal / (data.targets.kcal || 1)) * 100));
+
   const plannerSections = {
     summaryCard: renderReorderWrapper(
       'planner',
       'summaryCard',
-      'Riepilogo Giorno & Copia',
+      'Riepilogo Giorno & Grafico Macro',
       <div className={`${cCard} border rounded-2xl p-3.5 sm:p-4 space-y-4`}>
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
@@ -1559,33 +1763,91 @@ export default function App() {
           </div>
         </div>
 
-        <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/80'}`}>
-          <div className={`${cInner} rounded-xl p-3 border`}>
-            <div className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Calorie Totali</div>
-            <div className={`text-base sm:text-lg font-bold ${cEmerald}`}>
-              {dayMacros.kcal} <span className={`text-xs font-normal ${cTextSecondary}`}>/ {data.targets.kcal}</span>
+        <div className={`grid grid-cols-1 lg:grid-cols-12 gap-3 pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/80'}`}>
+          {/* 4 Box Calorie & Macro */}
+          <div className="lg:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+            <div className={`${cInner} rounded-xl p-3 border flex flex-col justify-between`}>
+              <div>
+                <div className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Calorie Totali</div>
+                <div className={`text-base sm:text-lg font-bold ${cEmerald} mt-0.5`}>
+                  {dayMacros.kcal}{' '}
+                  <span className={`text-xs font-normal ${cTextSecondary}`}>/ {data.targets.kcal}</span>
+                </div>
+              </div>
+              <div className="mt-2 space-y-1">
+                <div className={`w-full h-1.5 rounded-full overflow-hidden ${isLight ? 'bg-slate-200' : 'bg-slate-950'}`}>
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                    style={{ width: `${kcalPct}%` }}
+                  />
+                </div>
+                <div className={`text-[10px] ${cTextSecondary} flex justify-between`}>
+                  <span>{kcalPct}% target</span>
+                  {data.bodyProfile?.heightCm && (
+                    <span>{data.bodyProfile.heightCm}cm</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className={`${cInner} rounded-xl p-3 border flex flex-col justify-between`}>
+              <div>
+                <div className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Proteine</div>
+                <div className={`text-base sm:text-lg font-bold ${cSky} mt-0.5`}>
+                  {dayMacros.p}g <span className={`text-xs font-normal ${cTextSecondary}`}>/ {data.targets.p}g</span>
+                </div>
+              </div>
+              <div className="mt-2">
+                <div className={`w-full h-1.5 rounded-full overflow-hidden ${isLight ? 'bg-slate-200' : 'bg-slate-950'}`}>
+                  <div
+                    className="h-full bg-sky-400 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(100, Math.round((dayMacros.p / (data.targets.p || 1)) * 100))}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className={`${cInner} rounded-xl p-3 border flex flex-col justify-between`}>
+              <div>
+                <div className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Carboidrati</div>
+                <div className={`text-base sm:text-lg font-bold ${cAmber} mt-0.5`}>
+                  {dayMacros.c}g <span className={`text-xs font-normal ${cTextSecondary}`}>/ {data.targets.c}g</span>
+                </div>
+                <div className={`text-[10px] sm:text-[11px] ${cTextSecondary} mt-0.5`}>
+                  zuccheri: <span className="font-semibold">{dayMacros.sugars}g</span>
+                </div>
+              </div>
+              <div className="mt-2">
+                <div className={`w-full h-1.5 rounded-full overflow-hidden ${isLight ? 'bg-slate-200' : 'bg-slate-950'}`}>
+                  <div
+                    className="h-full bg-amber-400 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(100, Math.round((dayMacros.c / (data.targets.c || 1)) * 100))}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className={`${cInner} rounded-xl p-3 border flex flex-col justify-between`}>
+              <div>
+                <div className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Grassi</div>
+                <div className={`text-base sm:text-lg font-bold ${cRose} mt-0.5`}>
+                  {dayMacros.g}g <span className={`text-xs font-normal ${cTextSecondary}`}>/ {data.targets.g}g</span>
+                </div>
+              </div>
+              <div className="mt-2">
+                <div className={`w-full h-1.5 rounded-full overflow-hidden ${isLight ? 'bg-slate-200' : 'bg-slate-950'}`}>
+                  <div
+                    className="h-full bg-rose-400 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(100, Math.round((dayMacros.g / (data.targets.g || 1)) * 100))}%` }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
-          <div className={`${cInner} rounded-xl p-3 border`}>
-            <div className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Proteine</div>
-            <div className={`text-base sm:text-lg font-bold ${cSky}`}>
-              {dayMacros.p}g <span className={`text-xs font-normal ${cTextSecondary}`}>/ {data.targets.p}g</span>
-            </div>
-          </div>
-          <div className={`${cInner} rounded-xl p-3 border`}>
-            <div className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Carboidrati</div>
-            <div className={`text-base sm:text-lg font-bold ${cAmber}`}>
-              {dayMacros.c}g <span className={`text-xs font-normal ${cTextSecondary}`}>/ {data.targets.c}g</span>
-            </div>
-            <div className={`text-[10px] sm:text-[11px] ${cTextSecondary} mt-0.5`}>
-              di cui zuccheri: <span className="font-semibold">{dayMacros.sugars}g</span>
-            </div>
-          </div>
-          <div className={`${cInner} rounded-xl p-3 border`}>
-            <div className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Grassi</div>
-            <div className={`text-base sm:text-lg font-bold ${cRose}`}>
-              {dayMacros.g}g <span className={`text-xs font-normal ${cTextSecondary}`}>/ {data.targets.g}g</span>
-            </div>
+
+          {/* Grafico a Torta Macros */}
+          <div className="lg:col-span-4">
+            {renderMacrosPieChart()}
           </div>
         </div>
       </div>
@@ -1682,7 +1944,6 @@ export default function App() {
     ),
   };
 
-  // Calcolo anteprima ingrediente selezionato nel compositore
   const activeComposerFoodId = selectedFoodToAdd || (data.foods[0]?.id ?? '');
   const activeComposerFood = getFoodById(activeComposerFoodId);
   const activeComposerBaseGrams = extractBaseGrams(activeComposerFood);
@@ -2210,7 +2471,6 @@ export default function App() {
       'waterOverview',
       'Tracker Idratazione & Aggiunta Rapida',
       <div className={`${cCard} border rounded-2xl p-4 sm:p-5 space-y-4`}>
-        {/* Intestazione + Selettore Data + Giorno Workout */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="p-2.5 rounded-xl bg-sky-500/20 border border-sky-400/35 shrink-0">
@@ -2267,7 +2527,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Pannello Configurazione Calcolo Intelligente */}
         {editingWaterConfig && (
           <div className={`${cInner} border border-sky-400/40 rounded-xl p-3.5 space-y-3`}>
             <div className="flex items-center justify-between">
@@ -2347,7 +2606,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Progresso Principale + Suggerimento Intelligente */}
         <div className={`${cInner} border rounded-2xl p-4 space-y-3`}>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div>
@@ -2391,7 +2649,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Selettore Bevanda & Pulsanti Quick-Add */}
         <div className="space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <span className={`text-xs font-semibold ${cTextSecondary}`}>Aggiungi rapidamente:</span>
@@ -2461,7 +2718,6 @@ export default function App() {
       'waterHistory',
       'Andamento Settimanale & Registro Giornaliero',
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Grafico a barre Settimana Fissa Lunedì - Domenica */}
         <div className={`${cCard} border rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-4`}>
           <div className="flex items-start justify-between gap-2">
             <div>
@@ -2547,7 +2803,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Log giornaliero */}
         <div className={`${cCard} border rounded-2xl p-4 sm:p-5 space-y-3`}>
           <div className="flex items-center justify-between">
             <div>
@@ -3545,12 +3800,14 @@ export default function App() {
                         <button
                           onClick={() => {
                             setTempTargets(data.targets);
-                            setEditingTargets(true);
+                            setTempBodyProfile(data.bodyProfile || INITIAL_BODY_PROFILE);
+                            setCalcWeightInput(String(latestWeight ? latestWeight.weight : 77.2));
+                            setEditingTargets((v) => !v);
                           }}
                           className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-xs px-3 py-2.5 sm:py-2 rounded-xl ${cInner} border ${cTextPrimary} transition`}
                         >
-                          <Settings className={`w-3.5 h-3.5 ${cEmerald}`} />
-                          Target Macro
+                          <Calculator className={`w-3.5 h-3.5 ${cEmerald}`} />
+                          Target &amp; Calcolo Kcal
                         </button>
 
                         <button
@@ -3565,16 +3822,165 @@ export default function App() {
                     </div>
 
                     {editingTargets && (
-                      <div className={`${cCard} border border-emerald-400/50 rounded-2xl p-4 space-y-3`}>
+                      <div className={`${cCard} border border-emerald-400/50 rounded-2xl p-4 sm:p-5 space-y-4`}>
                         <div className="flex items-center justify-between">
-                          <h3 className={`font-semibold text-sm ${cEmerald}`}>Imposta Obiettivi Giornalieri</h3>
+                          <div className="flex items-center gap-2">
+                            <Calculator className={`w-4 h-4 ${cEmerald}`} />
+                            <h3 className={`font-semibold text-sm ${cEmerald}`}>
+                              Calcolo Fabbisogno (Peso + Altezza) &amp; Target Macro
+                            </h3>
+                          </div>
                           <button onClick={() => setEditingTargets(false)} className={`p-1 ${cTextSecondary} hover:text-rose-400`}>
                             <X className="w-4 h-4" />
                           </button>
                         </div>
+
+                        {/* Sezione Calcolo Antropometrico */}
+                        <div className={`${cInner} border rounded-xl p-3.5 space-y-3`}>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className={`text-xs font-semibold ${cTextPrimary}`}>
+                              Parametri Corporei &amp; Obiettivo (Salute + Massa Pulita)
+                            </span>
+                            <label className={`flex items-center gap-1.5 text-[11px] ${cTextSecondary} cursor-pointer`}>
+                              <input
+                                type="checkbox"
+                                checked={!!tempBodyProfile.autoSyncWeight}
+                                onChange={(e) =>
+                                  setTempBodyProfile({ ...tempBodyProfile, autoSyncWeight: e.target.checked })
+                                }
+                                className="rounded accent-emerald-500"
+                              />
+                              Aggiorna kcal in automatico alle nuove pesate
+                            </label>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                            <div>
+                              <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Peso (kg)</label>
+                              <input
+                                type="number"
+                                step="any"
+                                min="35"
+                                max="250"
+                                value={calcWeightInput}
+                                onChange={(e) => setCalcWeightInput(e.target.value)}
+                                className={`w-full ${cInput} border rounded-xl px-3 py-2`}
+                              />
+                            </div>
+                            <div>
+                              <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Altezza (cm)</label>
+                              <input
+                                type="number"
+                                min="120"
+                                max="230"
+                                value={tempBodyProfile.heightCm}
+                                onChange={(e) =>
+                                  setTempBodyProfile({
+                                    ...tempBodyProfile,
+                                    heightCm: Number(e.target.value) || 178,
+                                  })
+                                }
+                                className={`w-full ${cInput} border rounded-xl px-3 py-2`}
+                              />
+                            </div>
+                            <div>
+                              <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Età</label>
+                              <input
+                                type="number"
+                                min="15"
+                                max="99"
+                                value={tempBodyProfile.age}
+                                onChange={(e) =>
+                                  setTempBodyProfile({
+                                    ...tempBodyProfile,
+                                    age: Number(e.target.value) || 23,
+                                  })
+                                }
+                                className={`w-full ${cInput} border rounded-xl px-3 py-2`}
+                              />
+                            </div>
+                            <div>
+                              <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Sesso</label>
+                              <select
+                                value={tempBodyProfile.sex}
+                                onChange={(e) => setTempBodyProfile({ ...tempBodyProfile, sex: e.target.value })}
+                                className={`w-full ${cInput} border rounded-xl px-3 py-2`}
+                              >
+                                <option value="M" className={cOption}>Uomo</option>
+                                <option value="F" className={cOption}>Donna</option>
+                              </select>
+                            </div>
+                            <div className="col-span-2 sm:col-span-1">
+                              <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Attività</label>
+                              <select
+                                value={tempBodyProfile.activityFactor}
+                                onChange={(e) =>
+                                  setTempBodyProfile({
+                                    ...tempBodyProfile,
+                                    activityFactor: parseFloat(e.target.value),
+                                  })
+                                }
+                                className={`w-full ${cInput} border rounded-xl px-2.5 py-2 text-xs`}
+                              >
+                                <option value={1.375} className={cOption}>Leggera (1-2x/sett)</option>
+                                <option value={1.55} className={cOption}>Moderata (3x/sett)</option>
+                                <option value={1.725} className={cOption}>Intensa (4-5x/sett)</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
+                            <div className="flex-1">
+                              <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Obiettivo Fisico</label>
+                              <select
+                                value={tempBodyProfile.goal}
+                                onChange={(e) => setTempBodyProfile({ ...tempBodyProfile, goal: e.target.value })}
+                                className={`w-full ${cInput} border rounded-xl px-3 py-2 text-xs font-semibold`}
+                              >
+                                <option value="lean_bulk" className={cOption}>
+                                  Salute + Leggera Massa Pulita (+200 kcal • 2g/kg Pro)
+                                </option>
+                                <option value="recomp" className={cOption}>
+                                  Salute &amp; Ricomposizione Corporea (Normocalorica • 2g/kg Pro)
+                                </option>
+                                <option value="bulk" className={cOption}>
+                                  Aumento Massa Muscolare (+350 kcal • 2g/kg Pro)
+                                </option>
+                              </select>
+                            </div>
+
+                            <div className="flex items-end">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTempTargets({
+                                    kcal: liveCalcPreview.kcal,
+                                    p: liveCalcPreview.p,
+                                    c: liveCalcPreview.c,
+                                    g: liveCalcPreview.g,
+                                  });
+                                }}
+                                className={`w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/50 ${cEmerald} text-xs font-bold flex items-center justify-center gap-1.5 transition`}
+                              >
+                                <Sparkles className="w-3.5 h-3.5" />
+                                Applica Stima ({liveCalcPreview.kcal} kcal)
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className={`text-[11px] ${cTextSecondary} flex flex-wrap gap-3 pt-1 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/70'}`}>
+                            <span>Metabolismo Basale (BMR): <strong className={cTextPrimary}>{liveCalcPreview.bmr} kcal</strong></span>
+                            <span>• TDEE Mantenimento: <strong className={cTextPrimary}>{liveCalcPreview.tdee} kcal</strong></span>
+                            <span>
+                              • Target Suggerito: <strong className={cEmerald}>{liveCalcPreview.kcal} kcal</strong> ({liveCalcPreview.p}P / {liveCalcPreview.c}C / {liveCalcPreview.g}G)
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Campi Target Modificabili */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
                           {[
-                            { key: 'kcal', label: 'Calorie (kcal)' },
+                            { key: 'kcal', label: 'Calorie Target (kcal)' },
                             { key: 'p', label: 'Proteine (g)' },
                             { key: 'c', label: 'Carboidrati (g)' },
                             { key: 'g', label: 'Grassi (g)' },
@@ -3590,15 +3996,20 @@ export default function App() {
                             </div>
                           ))}
                         </div>
+
                         <div className="flex justify-end">
                           <button
                             onClick={() => {
-                              setData((prev) => ({ ...prev, targets: tempTargets }));
+                              setData((prev) => ({
+                                ...prev,
+                                targets: tempTargets,
+                                bodyProfile: tempBodyProfile,
+                              }));
                               setEditingTargets(false);
                             }}
-                            className="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-bold"
+                            className="w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-bold"
                           >
-                            Salva Obiettivi
+                            Salva Profilo &amp; Obiettivi
                           </button>
                         </div>
                       </div>
