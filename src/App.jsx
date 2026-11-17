@@ -135,17 +135,17 @@ const EMPTY_WEEKLY_PLAN = {
 };
 
 const INITIAL_FOODS = [
-  { id: 'f1', name: 'Yogurt Greco 0% (250g)', kcal: 145, p: 25, c: 9, g: 0 },
-  { id: 'f2', name: 'Muesli Croccante / Avena (60g)', kcal: 230, p: 6, c: 39, g: 5 },
-  { id: 'f3', name: 'Mandorle & Noci (20g)', kcal: 125, p: 4, c: 2, g: 11 },
-  { id: 'f4', name: 'Cioccolato Fondente 90% (15g)', kcal: 88, p: 1.5, c: 2, g: 8 },
-  { id: 'f5', name: 'Pasta di Semola (120g)', kcal: 425, p: 15, c: 86, g: 1.8 },
-  { id: 'f6', name: 'Petto di Pollo / Tenders (200g)', kcal: 220, p: 46, c: 0, g: 3 },
-  { id: 'f7', name: 'Olio Extravergine d’Oliva (15g)', kcal: 135, p: 0, c: 0, g: 15 },
-  { id: 'f8', name: 'Riso Basmati (100g)', kcal: 350, p: 8, c: 78, g: 0.8 },
-  { id: 'f9', name: 'Uova Intere Medie (3 uova)', kcal: 215, p: 19, c: 1.5, g: 15 },
-  { id: 'f10', name: 'Lenticchie Lessate (150g)', kcal: 140, p: 10, c: 22, g: 0.6 },
-  { id: 'f11', name: 'Banana Media (120g)', kcal: 105, p: 1.3, c: 27, g: 0.4 },
+  { id: 'f1', name: 'Yogurt Greco 0% (250g)', kcal: 145, p: 25, c: 9, sugars: 9, g: 0 },
+  { id: 'f2', name: 'Muesli Croccante / Avena (60g)', kcal: 230, p: 6, c: 39, sugars: 8, g: 5 },
+  { id: 'f3', name: 'Mandorle & Noci (20g)', kcal: 125, p: 4, c: 2, sugars: 1, g: 11 },
+  { id: 'f4', name: 'Cioccolato Fondente 90% (15g)', kcal: 88, p: 1.5, c: 2, sugars: 1.1, g: 8 },
+  { id: 'f5', name: 'Pasta di Semola (120g)', kcal: 425, p: 15, c: 86, sugars: 3.5, g: 1.8 },
+  { id: 'f6', name: 'Petto di Pollo / Tenders (200g)', kcal: 220, p: 46, c: 0, sugars: 0, g: 3 },
+  { id: 'f7', name: 'Olio Extravergine d’Oliva (15g)', kcal: 135, p: 0, c: 0, sugars: 0, g: 15 },
+  { id: 'f8', name: 'Riso Basmati (100g)', kcal: 350, p: 8, c: 78, sugars: 0.2, g: 0.8 },
+  { id: 'f9', name: 'Uova Intere Medie (3 uova)', kcal: 215, p: 19, c: 1.5, sugars: 1.5, g: 15 },
+  { id: 'f10', name: 'Lenticchie Lessate (150g)', kcal: 140, p: 10, c: 22, sugars: 1.8, g: 0.6 },
+  { id: 'f11', name: 'Banana Media (120g)', kcal: 105, p: 1.3, c: 27, sugars: 14.5, g: 0.4 },
 ];
 
 const INITIAL_MEALS = [
@@ -707,7 +707,7 @@ export default function App() {
   const getFoodById = (id) => data.foods.find((f) => f.id === id);
 
   const getMealMacros = (meal) => {
-    if (!meal) return { kcal: 0, p: 0, c: 0, g: 0 };
+    if (!meal) return { kcal: 0, p: 0, c: 0, sugars: 0, g: 0 };
     return meal.items.reduce(
       (acc, item) => {
         const food = getFoodById(item.foodId);
@@ -716,16 +716,17 @@ export default function App() {
           kcal: acc.kcal + food.kcal * item.qty,
           p: acc.p + food.p * item.qty,
           c: acc.c + food.c * item.qty,
+          sugars: acc.sugars + (Number(food.sugars) || 0) * item.qty,
           g: acc.g + food.g * item.qty,
         };
       },
-      { kcal: 0, p: 0, c: 0, g: 0 }
+      { kcal: 0, p: 0, c: 0, sugars: 0, g: 0 }
     );
   };
 
   const getDayMacros = (dayKey) => {
     const plan = data.weeklyPlan[dayKey] || {};
-    let totals = { kcal: 0, p: 0, c: 0, g: 0 };
+    let totals = { kcal: 0, p: 0, c: 0, sugars: 0, g: 0 };
     MEAL_SLOTS.forEach((slot) => {
       const mealIds = plan[slot] || [];
       mealIds.forEach((mId) => {
@@ -734,6 +735,7 @@ export default function App() {
         totals.kcal += mMacros.kcal;
         totals.p += mMacros.p;
         totals.c += mMacros.c;
+        totals.sugars += mMacros.sugars;
         totals.g += mMacros.g;
       });
     });
@@ -741,11 +743,12 @@ export default function App() {
       kcal: Math.round(totals.kcal),
       p: Math.round(totals.p),
       c: Math.round(totals.c),
+      sugars: Math.round(totals.sugars),
       g: Math.round(totals.g),
     };
   };
 
-  const [newFood, setNewFood] = useState({ name: '', baseGrams: '100', kcal: '', p: '', c: '', g: '' });
+  const [newFood, setNewFood] = useState({ name: '', baseGrams: '100', kcal: '', p: '', c: '', sugars: '', g: '' });
   const [mealName, setMealName] = useState('');
   const [mealItems, setMealItems] = useState([]);
   const [selectedFoodToAdd, setSelectedFoodToAdd] = useState('');
@@ -798,10 +801,11 @@ export default function App() {
       kcal: Number(newFood.kcal) || 0,
       p: Number(newFood.p) || 0,
       c: Number(newFood.c) || 0,
+      sugars: Number(newFood.sugars) || 0,
       g: Number(newFood.g) || 0,
     };
     setData((prev) => ({ ...prev, foods: [created, ...prev.foods] }));
-    setNewFood({ name: '', baseGrams: '100', kcal: '', p: '', c: '', g: '' });
+    setNewFood({ name: '', baseGrams: '100', kcal: '', p: '', c: '', sugars: '', g: '' });
   };
 
   const handleDeleteFood = (id) => {
@@ -1124,7 +1128,7 @@ export default function App() {
         ...prev,
         foods: [],
       }));
-      setNewFood({ name: '', baseGrams: '100', kcal: '', p: '', c: '', g: '' });
+      setNewFood({ name: '', baseGrams: '100', kcal: '', p: '', c: '', sugars: '', g: '' });
     } else if (nutritionSubTab === 'water') {
       if (!window.confirm(`Vuoi azzerare a 0 tutte le bevute registrate per il ${selectedWaterDate}?`)) return;
       setData((prev) => ({
@@ -1573,6 +1577,9 @@ export default function App() {
             <div className={`text-base sm:text-lg font-bold ${cAmber}`}>
               {dayMacros.c}g <span className={`text-xs font-normal ${cTextSecondary}`}>/ {data.targets.c}g</span>
             </div>
+            <div className={`text-[10px] sm:text-[11px] ${cTextSecondary} mt-0.5`}>
+              di cui zuccheri: <span className="font-semibold">{dayMacros.sugars}g</span>
+            </div>
           </div>
           <div className={`${cInner} rounded-xl p-3 border`}>
             <div className={`text-[11px] sm:text-xs ${cTextSecondary}`}>Grassi</div>
@@ -1624,7 +1631,10 @@ export default function App() {
                             <div className={`text-[11px] ${cTextSecondary} mt-1 flex flex-wrap gap-2`}>
                               <span className={`${cEmerald} font-semibold`}>{Math.round(macros.kcal)} kcal</span>
                               <span>• P: {Math.round(macros.p)}g</span>
-                              <span>• C: {Math.round(macros.c)}g</span>
+                              <span>
+                                • C: {Math.round(macros.c)}g
+                                {macros.sugars > 0 ? ` (zucch. ${Math.round(macros.sugars)}g)` : ''}
+                              </span>
                               <span>• G: {Math.round(macros.g)}g</span>
                             </div>
                           </div>
@@ -1754,7 +1764,7 @@ export default function App() {
               >
                 {data.foods.map((f) => (
                   <option key={f.id} value={f.id} className={cOption}>
-                    {f.name} ({f.kcal} kcal | {f.p}P {f.c}C {f.g}G)
+                    {f.name} ({f.kcal} kcal | {f.p}P {f.c}C{Number(f.sugars) > 0 ? ` [${f.sugars}Z]` : ''} {f.g}G)
                   </option>
                 ))}
               </select>
@@ -1864,7 +1874,12 @@ export default function App() {
                     {' • '}
                     <span className={cSky}>{Math.round(activeComposerFood.p * computedPreviewMultiplier)}g P</span>
                     {' • '}
-                    <span className={cAmber}>{Math.round(activeComposerFood.c * computedPreviewMultiplier)}g C</span>
+                    <span className={cAmber}>
+                      {Math.round(activeComposerFood.c * computedPreviewMultiplier)}g C
+                      {Number(activeComposerFood.sugars) > 0
+                        ? ` (${Math.round((Number(activeComposerFood.sugars) || 0) * computedPreviewMultiplier)}g zucch.)`
+                        : ''}
+                    </span>
                     {' • '}
                     <span className={cRose}>{Math.round(activeComposerFood.g * computedPreviewMultiplier)}g G</span>
                   </span>
@@ -1891,7 +1906,9 @@ export default function App() {
                       <div className={`font-medium truncate ${cTextPrimary}`}>{food.name}</div>
                       <div className={`text-[11px] ${cTextSecondary} mt-0.5`}>
                         {Math.round(food.kcal * it.qty)} kcal • P: {Math.round(food.p * it.qty)}g • C:{' '}
-                        {Math.round(food.c * it.qty)}g • G: {Math.round(food.g * it.qty)}g
+                        {Math.round(food.c * it.qty)}g
+                        {Number(food.sugars) > 0 ? ` (zucch. ${Math.round((Number(food.sugars) || 0) * it.qty)}g)` : ''} • G:{' '}
+                        {Math.round(food.g * it.qty)}g
                         {itemBaseG ? ` • ~${Math.round(it.qty * itemBaseG)}g` : ''}
                       </div>
                     </div>
@@ -1935,12 +1952,15 @@ export default function App() {
               {(() => {
                 const previewMacros = getMealMacros({ items: mealItems });
                 return (
-                  <div className="bg-emerald-500/15 border border-emerald-400/40 rounded-xl p-3 flex flex-wrap justify-between items-center text-xs">
+                  <div className="bg-emerald-500/15 border border-emerald-400/40 rounded-xl p-3 flex flex-wrap justify-between items-center text-xs gap-2">
                     <span className={`font-semibold ${cEmerald}`}>Totale Pasto:</span>
-                    <div className="flex gap-3 font-bold">
+                    <div className="flex flex-wrap gap-3 font-bold">
                       <span className={cTextPrimary}>{Math.round(previewMacros.kcal)} kcal</span>
                       <span className={cSky}>P: {Math.round(previewMacros.p)}g</span>
-                      <span className={cAmber}>C: {Math.round(previewMacros.c)}g</span>
+                      <span className={cAmber}>
+                        C: {Math.round(previewMacros.c)}g
+                        {previewMacros.sugars > 0 ? ` (zucch. ${Math.round(previewMacros.sugars)}g)` : ''}
+                      </span>
                       <span className={cRose}>G: {Math.round(previewMacros.g)}g</span>
                     </div>
                   </div>
@@ -2003,10 +2023,12 @@ export default function App() {
                       })}
                     </div>
                   </div>
-                  <div className={`pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/80'} flex flex-wrap gap-3 text-xs font-semibold`}>
+                  <div className={`pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/80'} flex flex-wrap gap-2.5 text-xs font-semibold`}>
                     <span className={cEmerald}>{Math.round(m.kcal)} kcal</span>
                     <span className={cSky}>{Math.round(m.p)}g P</span>
-                    <span className={cAmber}>{Math.round(m.c)}g C</span>
+                    <span className={cAmber}>
+                      {Math.round(m.c)}g C{m.sugars > 0 ? ` (${Math.round(m.sugars)}g zucch.)` : ''}
+                    </span>
                     <span className={cRose}>{Math.round(m.g)}g G</span>
                   </div>
                 </div>
@@ -2054,7 +2076,7 @@ export default function App() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 items-start">
             <div>
               <label className={`block text-xs ${cTextSecondary} mb-1`}>Calorie (kcal)</label>
               <input
@@ -2078,17 +2100,31 @@ export default function App() {
                 className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
               />
             </div>
-            <div>
-              <label className={`block text-xs ${cTextSecondary} mb-1`}>Carboidrati (g)</label>
-              <input
-                type="number"
-                step="0.1"
-                required
-                placeholder="6"
-                value={newFood.c}
-                onChange={(e) => setNewFood({ ...newFood, c: e.target.value })}
-                className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
-              />
+            <div className="space-y-2">
+              <div>
+                <label className={`block text-xs ${cTextSecondary} mb-1`}>Carboidrati (g)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  required
+                  placeholder="6"
+                  value={newFood.c}
+                  onChange={(e) => setNewFood({ ...newFood, c: e.target.value })}
+                  className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
+                />
+              </div>
+              <div className={`pl-2.5 border-l-2 ${isLight ? 'border-amber-400/70' : 'border-amber-400/50'}`}>
+                <label className={`block text-[11px] ${cTextSecondary} mb-1`}>di cui zuccheri (g)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  placeholder="2.5"
+                  value={newFood.sugars}
+                  onChange={(e) => setNewFood({ ...newFood, sugars: e.target.value })}
+                  className={`w-full ${cInput} border rounded-xl px-3 py-2 sm:py-1.5 text-xs focus:outline-none focus:border-amber-400`}
+                />
+              </div>
             </div>
             <div>
               <label className={`block text-xs ${cTextSecondary} mb-1`}>Grassi (g)</label>
@@ -2130,10 +2166,13 @@ export default function App() {
               >
                 <div className="min-w-0">
                   <div className={`font-medium text-sm truncate ${cTextPrimary}`}>{food.name}</div>
-                  <div className={`text-xs ${cTextSecondary} flex flex-wrap gap-2.5 mt-0.5`}>
+                  <div className={`text-xs ${cTextSecondary} flex flex-wrap gap-2 mt-0.5`}>
                     <span className={`${cEmerald} font-semibold`}>{food.kcal} kcal</span>
                     <span>P: {food.p}g</span>
-                    <span>C: {food.c}g</span>
+                    <span>
+                      C: {food.c}g
+                      {Number(food.sugars) > 0 ? ` (zucch. ${food.sugars}g)` : ''}
+                    </span>
                     <span>G: {food.g}g</span>
                   </div>
                 </div>
