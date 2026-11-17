@@ -272,8 +272,21 @@ const INITIAL_LAYOUT = {
 
 const STORAGE_KEY = 'fittrack_pro_data_v1';
 
+// Usa sempre il fuso orario locale per evitare lo sfasamento UTC a mezzanotte
+function getLocalIsoDate(dateObj = new Date()) {
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function getTodayIso() {
-  return new Date().toISOString().split('T')[0];
+  return getLocalIsoDate(new Date());
+}
+
+function getTodayDayKey(dateObj = new Date()) {
+  const jsDay = dateObj.getDay();
+  return jsDay === 0 ? 'Dom' : DAYS[jsDay - 1];
 }
 
 // Estrae i grammi di riferimento dal nome dell'alimento (es. "Pasta (120g)" -> 120)
@@ -532,13 +545,70 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [nutritionSubTab, setNutritionSubTab] = useState('planner');
-  const [selectedDay, setSelectedDay] = useState(() => {
-    const jsDay = new Date().getDay();
-    return jsDay === 0 ? 'Dom' : DAYS[jsDay - 1];
-  });
+
+  // Data corrente reattiva (si aggiorna automaticamente allo scoccare delle 00:00 o al risveglio dell'app)
+  const [todayIso, setTodayIso] = useState(() => getTodayIso());
+  const todayIsoRef = useRef(todayIso);
+
+  const [selectedDay, setSelectedDay] = useState(() => getTodayDayKey());
+  const [selectedWaterDate, setSelectedWaterDate] = useState(() => getTodayIso());
+  const [newWeightDate, setNewWeightDate] = useState(() => getTodayIso());
+
+  const syncRolloverDate = useCallback(() => {
+    const now = new Date();
+    const currentIso = getLocalIsoDate(now);
+    const prevIso = todayIsoRef.current;
+
+    if (currentIso !== prevIso) {
+      const prevDayKey = getTodayDayKey(new Date(`${prevIso}T12:00:00`));
+      const nextDayKey = getTodayDayKey(now);
+
+      todayIsoRef.current = currentIso;
+      setTodayIso(currentIso);
+
+      // Se l'utente stava visualizzando "oggi", avanza automaticamente al nuovo giorno
+      setSelectedDay((curr) => (curr === prevDayKey ? nextDayKey : curr));
+      setSelectedWaterDate((curr) => (curr === prevIso ? currentIso : curr));
+      setNewWeightDate((curr) => (curr === prevIso ? currentIso : curr));
+    }
+  }, []);
+
+  useEffect(() => {
+    // 1) Controlla periodicamente (ogni 15s) per catturare la mezzanotte esatta anche con browser aperto
+    const intervalId = setInterval(syncRolloverDate, 15000);
+
+    // 2) Calcola anche un timeout preciso al millisecondo fino alla prossima mezzanotte locale
+    const now = new Date();
+    const nextMidnight = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1,
+      0,
+      0,
+      1,
+      0
+    );
+    const msToMidnight = Math.max(1000, nextMidnight.getTime() - now.getTime());
+    const midnightTimeout = setTimeout(syncRolloverDate, msToMidnight);
+
+    // 3) Controlla subito quando l'app/telefono viene riattivato dallo stand-by
+    const handleResume = () => {
+      if (document.visibilityState === 'visible') {
+        syncRolloverDate();
+      }
+    };
+    window.addEventListener('focus', syncRolloverDate);
+    document.addEventListener('visibilitychange', handleResume);
+
+    return () => {
+      clearInterval(intervalId);
+      clearTimeout(midnightTimeout);
+      window.removeEventListener('focus', syncRolloverDate);
+      document.removeEventListener('visibilitychange', handleResume);
+    };
+  }, [todayIso, syncRolloverDate]);
 
   // Stati per Tracker Idratazione
-  const [selectedWaterDate, setSelectedWaterDate] = useState(() => getTodayIso());
   const [customWaterAmount, setCustomWaterAmount] = useState('');
   const [selectedDrinkType, setSelectedDrinkType] = useState('water');
   const [editingWaterConfig, setEditingWaterConfig] = useState(false);
@@ -639,7 +709,6 @@ export default function App() {
   const [selectedFoodQty, setSelectedFoodQty] = useState('1');
   const [selectedFoodGrams, setSelectedFoodGrams] = useState('100');
   const [newWeight, setNewWeight] = useState('');
-  const [newWeightDate, setNewWeightDate] = useState(() => getTodayIso());
   const [newWeightNote, setNewWeightNote] = useState('');
   const [editingTargets, setEditingTargets] = useState(false);
   const [tempTargets, setTempTargets] = useState(data.targets);
@@ -876,16 +945,16 @@ export default function App() {
     setCompletedSets(nextCompleted);
 
     if (nextState) {
-      const today = getTodayIso();
+      const currentToday = getTodayIso();
       setData((prev) => {
-        if (prev.waterSettings?.workoutDates?.[today]) return prev;
+        if (prev.waterSettings?.workoutDates?.[currentToday]) return prev;
         return {
           ...prev,
           waterSettings: {
             ...prev.waterSettings,
             workoutDates: {
               ...(prev.waterSettings?.workoutDates || {}),
-              [today]: true,
+              [currentToday]: true,
             },
           },
         };
@@ -1134,7 +1203,6 @@ export default function App() {
       .reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
   };
 
-  const todayIso = getTodayIso();
   const todayWaterTotal = getWaterTotalForDate(todayIso);
   const todayWaterTarget = getWaterTargetForDate(todayIso);
 
@@ -1182,11 +1250,11 @@ export default function App() {
     };
   };
 
-  // Ultimi 7 giorni per grafico a barre idratazione
+  // Ultimi 7 giorni ancorati a todayIso (si aggiorna automaticamente allo scattare della mezzanotte)
   const last7WaterDays = Array.from({ length: 7 }).map((_, idx) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - idx));
-    const iso = d.toISOString().split('T')[0];
+    const [y, m, dNum] = todayIso.split('-').map(Number);
+    const d = new Date(y, m - 1, dNum - (6 - idx));
+    const iso = getLocalIsoDate(d);
     const dayShort = d.getDay() === 0 ? 'Dom' : DAYS[d.getDay() - 1];
     const total = getWaterTotalForDate(iso);
     const target = getWaterTargetForDate(iso);
