@@ -787,7 +787,7 @@ export default function App() {
     e.preventDefault();
     if (!newFood.name.trim()) return;
     const rawName = newFood.name.trim();
-    const parsedBaseG = parseFloat(newFood.baseGrams);
+    const parsedBaseG = parseFloat(String(newFood.baseGrams).replace(',', '.'));
     const hasGramsInName = /\(\d+(?:[.,]\d+)?\s*(?:g|gr|ml)\)/i.test(rawName);
     const formattedName =
       !hasGramsInName && !isNaN(parsedBaseG) && parsedBaseG > 0
@@ -798,11 +798,11 @@ export default function App() {
       id: 'f-' + Date.now(),
       name: formattedName,
       baseGrams: !isNaN(parsedBaseG) && parsedBaseG > 0 ? parsedBaseG : undefined,
-      kcal: Number(newFood.kcal) || 0,
-      p: Number(newFood.p) || 0,
-      c: Number(newFood.c) || 0,
-      sugars: Number(newFood.sugars) || 0,
-      g: Number(newFood.g) || 0,
+      kcal: Number(String(newFood.kcal).replace(',', '.')) || 0,
+      p: Number(String(newFood.p).replace(',', '.')) || 0,
+      c: Number(String(newFood.c).replace(',', '.')) || 0,
+      sugars: Number(String(newFood.sugars).replace(',', '.')) || 0,
+      g: Number(String(newFood.g).replace(',', '.')) || 0,
     };
     setData((prev) => ({ ...prev, foods: [created, ...prev.foods] }));
     setNewFood({ name: '', baseGrams: '100', kcal: '', p: '', c: '', sugars: '', g: '' });
@@ -1082,7 +1082,7 @@ export default function App() {
       name: newExercise.name.trim(),
       sets: Math.max(1, parseInt(newExercise.sets, 10) || 3),
       reps: newExercise.reps.trim() || '10',
-      weight: Math.max(0, parseFloat(newExercise.weight) || 0),
+      weight: Math.max(0, parseFloat(String(newExercise.weight).replace(',', '.')) || 0),
       rest: Math.max(15, parseInt(newExercise.rest, 10) || 90),
       notes: newExercise.notes.trim(),
     };
@@ -1776,7 +1776,7 @@ export default function App() {
                       type="button"
                       onClick={() =>
                         setSelectedFoodGrams((prev) =>
-                          String(Math.max(5, (parseFloat(prev) || activeComposerBaseGrams) - 10))
+                          String(Math.max(5, (parseFloat(String(prev).replace(',', '.')) || activeComposerBaseGrams) - 10))
                         )
                       }
                       className={`w-10 h-10 sm:h-9 rounded-xl border font-bold ${cCard} ${cTextPrimary} active:scale-95`}
@@ -1786,8 +1786,8 @@ export default function App() {
                     <div className="relative flex-1">
                       <input
                         type="number"
-                        step="1"
-                        min="1"
+                        step="any"
+                        min="0.1"
                         value={selectedFoodGrams}
                         onChange={(e) => setSelectedFoodGrams(e.target.value)}
                         className={`w-full ${cInput} border rounded-xl pl-3 pr-7 py-2 text-center font-bold focus:outline-none focus:border-emerald-400`}
@@ -1800,7 +1800,7 @@ export default function App() {
                       type="button"
                       onClick={() =>
                         setSelectedFoodGrams((prev) =>
-                          String((parseFloat(prev) || activeComposerBaseGrams) + 10)
+                          String((parseFloat(String(prev).replace(',', '.')) || activeComposerBaseGrams) + 10)
                         )
                       }
                       className={`w-10 h-10 sm:h-9 rounded-xl border font-bold ${cCard} ${cTextPrimary} active:scale-95`}
@@ -1814,7 +1814,7 @@ export default function App() {
                       type="button"
                       onClick={() =>
                         setSelectedFoodQty((prev) =>
-                          String(Math.max(0.25, Number(((parseFloat(prev) || 1) - 0.25).toFixed(2))))
+                          String(Math.max(0.25, Number(((parseFloat(String(prev).replace(',', '.')) || 1) - 0.25).toFixed(2))))
                         )
                       }
                       className={`w-10 h-10 sm:h-9 rounded-xl border font-bold ${cCard} ${cTextPrimary} active:scale-95`}
@@ -1824,8 +1824,8 @@ export default function App() {
                     <div className="relative flex-1">
                       <input
                         type="number"
-                        step="0.1"
-                        min="0.1"
+                        step="any"
+                        min="0.01"
                         value={selectedFoodQty}
                         onChange={(e) => setSelectedFoodQty(e.target.value)}
                         className={`w-full ${cInput} border rounded-xl pl-3 pr-7 py-2 text-center font-bold focus:outline-none focus:border-emerald-400`}
@@ -1838,7 +1838,7 @@ export default function App() {
                       type="button"
                       onClick={() =>
                         setSelectedFoodQty((prev) =>
-                          String(Number(((parseFloat(prev) || 1) + 0.25).toFixed(2)))
+                          String(Number(((parseFloat(String(prev).replace(',', '.')) || 1) + 0.25).toFixed(2)))
                         )
                       }
                       className={`w-10 h-10 sm:h-9 rounded-xl border font-bold ${cCard} ${cTextPrimary} active:scale-95`}
@@ -1916,15 +1916,15 @@ export default function App() {
                     <div className="flex items-center justify-end gap-1.5 shrink-0">
                       <button
                         type="button"
-                        onClick={() => handleUpdateMealItemQty(idx, Math.max(0.25, it.qty - 0.25))}
+                        onClick={() => handleUpdateMealItemQty(idx, Math.max(0.05, it.qty - 0.25))}
                         className={`w-7 h-7 rounded-lg border font-bold ${cCard} ${cTextPrimary}`}
                       >
                         -
                       </button>
                       <input
                         type="number"
-                        step="0.1"
-                        min="0.1"
+                        step="any"
+                        min="0.01"
                         value={it.qty}
                         onChange={(e) => handleUpdateMealItemQty(idx, e.target.value)}
                         className={`w-16 ${cInput} border rounded-lg px-1.5 py-1 text-center font-bold text-xs`}
@@ -2067,8 +2067,8 @@ export default function App() {
               <label className={`block text-xs ${cTextSecondary} mb-1`}>Porzione rif. (g)</label>
               <input
                 type="number"
-                min="1"
-                step="1"
+                min="0.1"
+                step="any"
                 placeholder="100"
                 value={newFood.baseGrams}
                 onChange={(e) => setNewFood({ ...newFood, baseGrams: e.target.value })}
@@ -2081,6 +2081,7 @@ export default function App() {
               <label className={`block text-xs ${cTextSecondary} mb-1`}>Calorie (kcal)</label>
               <input
                 type="number"
+                step="any"
                 required
                 placeholder="190"
                 value={newFood.kcal}
@@ -2092,7 +2093,7 @@ export default function App() {
               <label className={`block text-xs ${cTextSecondary} mb-1`}>Proteine (g)</label>
               <input
                 type="number"
-                step="0.1"
+                step="any"
                 required
                 placeholder="24"
                 value={newFood.p}
@@ -2105,7 +2106,7 @@ export default function App() {
                 <label className={`block text-xs ${cTextSecondary} mb-1`}>Carboidrati (g)</label>
                 <input
                   type="number"
-                  step="0.1"
+                  step="any"
                   required
                   placeholder="6"
                   value={newFood.c}
@@ -2117,7 +2118,7 @@ export default function App() {
                 <label className={`block text-[11px] ${cTextSecondary} mb-1`}>di cui zuccheri (g)</label>
                 <input
                   type="number"
-                  step="0.1"
+                  step="any"
                   min="0"
                   placeholder="2.5"
                   value={newFood.sugars}
@@ -2130,7 +2131,7 @@ export default function App() {
               <label className={`block text-xs ${cTextSecondary} mb-1`}>Grassi (g)</label>
               <input
                 type="number"
-                step="0.1"
+                step="any"
                 required
                 placeholder="8"
                 value={newFood.g}
@@ -2611,7 +2612,7 @@ export default function App() {
               <label className={`block text-xs ${cTextSecondary} mb-1`}>Peso (kg)</label>
               <input
                 type="number"
-                step="0.1"
+                step="any"
                 required
                 placeholder="77.0"
                 value={newWeight}
@@ -3080,7 +3081,7 @@ export default function App() {
                   <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Carico kg (0 = BW)</label>
                   <input
                     type="number"
-                    step="0.5"
+                    step="any"
                     min="0"
                     value={newExercise.weight}
                     onChange={(e) => setNewExercise({ ...newExercise, weight: e.target.value })}
