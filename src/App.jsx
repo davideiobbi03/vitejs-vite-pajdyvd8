@@ -218,8 +218,8 @@ const INITIAL_BODY_PROFILE = {
   heightCm: 178,
   age: 23,
   sex: 'M',
-  activityFactor: 1.55, // Moderatamente attivo (3x workout + stile di vita attivo)
-  goal: 'lean_bulk', // 'lean_bulk' (+200 kcal salute & massa pulita), 'recomp' (mantenimento), 'bulk' (+350 kcal)
+  activityFactor: 1.55,
+  goal: 'lean_bulk',
   autoSyncWeight: true,
 };
 
@@ -230,11 +230,11 @@ const INITIAL_WORKOUTS = [
     title: 'Upper Push (Spinta)',
     focus: 'Petto, Spalle Anteriori/Laterali, Tricipiti',
     exercises: [
-      { id: 'e1', name: 'Spinte su Panca Piana/Pavimento con Manubri', sets: 4, reps: '8-10', weight: 22, rest: 120, notes: 'Controlla la discesa per 2 secondi, gomiti a 45°' },
-      { id: 'e2', name: 'Military Press in Piedi con Manubri', sets: 3, reps: '8-10', weight: 14, rest: 90, notes: 'Core contratto, non inarcare la zona lombare' },
-      { id: 'e3', name: 'Piegamenti sulle Braccia (Push-Up)', sets: 3, reps: 'Max (12-15)', weight: 0, rest: 90, notes: 'Corpo libero - petto a 2 cm da terra' },
-      { id: 'e4', name: 'Alzate Laterali con Manubri', sets: 4, reps: '12-15', weight: 8, rest: 60, notes: 'Guida con i gomiti, pausa di 1s in alto' },
-      { id: 'e5', name: 'French Press Manubri (Estensioni Tricipiti)', sets: 3, reps: '10-12', weight: 10, rest: 60, notes: 'Gomiti stretti e fermi' },
+      { id: 'e1', name: 'Spinte su Panca Piana/Pavimento con Manubri', sets: 4, reps: '8-10', weight: 22, rest: 120, restAfterExercise: 150, notes: 'Controlla la discesa per 2 secondi, gomiti a 45°' },
+      { id: 'e2', name: 'Military Press in Piedi con Manubri', sets: 3, reps: '8-10', weight: 14, rest: 90, restAfterExercise: 120, notes: 'Core contratto, non inarcare la zona lombare' },
+      { id: 'e3', name: 'Piegamenti sulle Braccia (Push-Up)', sets: 3, reps: 'Max (12-15)', weight: 0, rest: 90, restAfterExercise: 120, notes: 'Corpo libero - petto a 2 cm da terra' },
+      { id: 'e4', name: 'Alzate Laterali con Manubri', sets: 4, reps: '12-15', weight: 8, rest: 60, restAfterExercise: 90, notes: 'Guida con i gomiti, pausa di 1s in alto' },
+      { id: 'e5', name: 'French Press Manubri (Estensioni Tricipiti)', sets: 3, reps: '10-12', weight: 10, rest: 60, restAfterExercise: 90, notes: 'Gomiti stretti e fermi' },
     ],
   },
   {
@@ -243,11 +243,11 @@ const INITIAL_WORKOUTS = [
     title: 'Lower & Core',
     focus: 'Quadricipiti, Femorali, Glutei, Polpacci e Addome',
     exercises: [
-      { id: 'e6', name: 'Goblet Squat con Manubrio', sets: 4, reps: '10-12', weight: 24, rest: 120, notes: 'Accosciata profonda, schiena neutra' },
-      { id: 'e7', name: 'Stacchi Rumeni (RDL) con Manubri', sets: 4, reps: '10', weight: 22, rest: 120, notes: 'Spingi il bacino indietro, senti allungare i femorali' },
-      { id: 'e8', name: 'Affondi Bulgari (Bulgarian Split Squat)', sets: 3, reps: '8-10 / lato', weight: 14, rest: 90, notes: 'Busto leggermente inclinato in avanti' },
-      { id: 'e9', name: 'Calf Raise su Rialzo (Polpacci)', sets: 4, reps: '15-20', weight: 16, rest: 60, notes: 'Massimo allungamento in basso' },
-      { id: 'e10', name: 'Plank Addominale + Hollow Hold', sets: 3, reps: '45-60 sec', weight: 0, rest: 60, notes: 'Corpo libero - retroversione del bacino' },
+      { id: 'e6', name: 'Goblet Squat con Manubrio', sets: 4, reps: '10-12', weight: 24, rest: 120, restAfterExercise: 180, notes: 'Accosciata profonda, schiena neutra' },
+      { id: 'e7', name: 'Stacchi Rumeni (RDL) con Manubri', sets: 4, reps: '10', weight: 22, rest: 120, restAfterExercise: 150, notes: 'Spingi il bacino indietro, senti allungare i femorali' },
+      { id: 'e8', name: 'Affondi Bulgari (Bulgarian Split Squat)', sets: 3, reps: '8-10 / lato', weight: 14, rest: 90, restAfterExercise: 120, notes: 'Busto leggermente inclinato in avanti' },
+      { id: 'e9', name: 'Calf Raise su Rialzo (Polpacci)', sets: 4, reps: '15-20', weight: 16, rest: 60, restAfterExercise: 90, notes: 'Massimo allungamento in basso' },
+      { id: 'e10', name: 'Plank Addominale + Hollow Hold', sets: 3, reps: '45-60 sec', weight: 0, rest: 60, restAfterExercise: 90, notes: 'Corpo libero - retroversione del bacino' },
     ],
   },
   {
@@ -256,11 +256,11 @@ const INITIAL_WORKOUTS = [
     title: 'Upper Pull & Braccia',
     focus: 'Dorsali, Deltoidi Posteriori, Bicipiti e Richiamo Braccia',
     exercises: [
-      { id: 'e11', name: 'Rematore con Manubri a Busto Flesso', sets: 4, reps: '8-10', weight: 20, rest: 120, notes: 'Porta i manubri verso le tasche, scapole addotte' },
-      { id: 'e12', name: 'Rematore Singolo con Appoggio (One-Arm Row)', sets: 3, reps: '10-12 / lato', weight: 24, rest: 90, notes: 'Zero slancio, massimo allungamento in basso' },
-      { id: 'e13', name: 'Alzate Posteriori a 90° (Rear Delt Fly)', sets: 4, reps: '12-15', weight: 7, rest: 60, notes: 'Controllo totale del movimento' },
-      { id: 'e14', name: 'Curl Alternato con Manubri in Piedi', sets: 3, reps: '10-12', weight: 12, rest: 75, notes: 'Supinazione completa del polso in salita' },
-      { id: 'e15', name: 'Hammer Curl (Presa a Martello)', sets: 3, reps: '12', weight: 12, rest: 60, notes: 'Ottimo per brachiale e avambracci' },
+      { id: 'e11', name: 'Rematore con Manubri a Busto Flesso', sets: 4, reps: '8-10', weight: 20, rest: 120, restAfterExercise: 150, notes: 'Porta i manubri verso le tasche, scapole addotte' },
+      { id: 'e12', name: 'Rematore Singolo con Appoggio (One-Arm Row)', sets: 3, reps: '10-12 / lato', weight: 24, rest: 90, restAfterExercise: 120, notes: 'Zero slancio, massimo allungamento in basso' },
+      { id: 'e13', name: 'Alzate Posteriori a 90° (Rear Delt Fly)', sets: 4, reps: '12-15', weight: 7, rest: 60, restAfterExercise: 90, notes: 'Controllo totale del movimento' },
+      { id: 'e14', name: 'Curl Alternato con Manubri in Piedi', sets: 3, reps: '10-12', weight: 12, rest: 75, restAfterExercise: 90, notes: 'Supinazione completa del polso in salita' },
+      { id: 'e15', name: 'Hammer Curl (Presa a Martello)', sets: 3, reps: '12', weight: 12, rest: 60, restAfterExercise: 90, notes: 'Ottimo per brachiale e avambracci' },
     ],
   },
 ];
@@ -284,7 +284,32 @@ const INITIAL_LAYOUT = {
 
 const STORAGE_KEY = 'fittrack_pro_data_v1';
 
-// Calcolo scientifico Mifflin-St Jeor + ripartizione macro per salute e ipertrofia pulita
+// Helper per recuperare il tempo di pausa tra la serie `setIndex` e la `setIndex + 1`
+function getSetRestSeconds(exercise, setIndex) {
+  const defaultRest = Math.max(0, Number(exercise?.rest) || 90);
+  if (Array.isArray(exercise?.setRests) && typeof exercise.setRests[setIndex] === 'number') {
+    return Math.max(0, exercise.setRests[setIndex]);
+  }
+  return defaultRest;
+}
+
+// Helper per recuperare la pausa specifica verso l'esercizio successivo
+function getExerciseTransitionRest(exercise, fallbackGlobalRest = 180) {
+  if (typeof exercise?.restAfterExercise === 'number' && !isNaN(exercise.restAfterExercise)) {
+    return Math.max(0, exercise.restAfterExercise);
+  }
+  return Math.max(0, Number(fallbackGlobalRest) || 180);
+}
+
+// Verifica se l'esercizio ha pause tra serie differenziate (es. S1->S2 120s, S2->S3 90s)
+function hasCustomPerSetRests(exercise) {
+  if (!exercise || exercise.sets <= 1 || !Array.isArray(exercise.setRests)) return false;
+  const transitions = exercise.sets - 1;
+  const relevant = exercise.setRests.slice(0, transitions);
+  if (relevant.length === 0) return false;
+  return relevant.some((val) => val !== exercise.rest);
+}
+
 function calculateSmartNutritionTargets(weightKg, profile = INITIAL_BODY_PROFILE) {
   const w = Math.max(35, Number(weightKg) || 75);
   const h = Math.max(120, Number(profile.heightCm) || 178);
@@ -292,7 +317,6 @@ function calculateSmartNutritionTargets(weightKg, profile = INITIAL_BODY_PROFILE
   const sex = profile.sex === 'F' ? 'F' : 'M';
   const activity = Number(profile.activityFactor) || 1.55;
 
-  // BMR Mifflin-St Jeor
   const bmr =
     sex === 'M'
       ? 10 * w + 6.25 * h - 5 * age + 5
@@ -300,16 +324,13 @@ function calculateSmartNutritionTargets(weightKg, profile = INITIAL_BODY_PROFILE
 
   const tdee = bmr * activity;
 
-  let surplus = 200; // Salute + aumento graduale massa pulita
+  let surplus = 200;
   if (profile.goal === 'recomp') surplus = 0;
   if (profile.goal === 'bulk') surplus = 350;
 
   const targetKcal = Math.round((tdee + surplus) / 10) * 10;
-  // Proteine: 2.0 g/kg per sintesi proteica ottimale senza eccessi
   const p = Math.round(w * 2.0);
-  // Grassi: ~0.95 g/kg per equilibrio ormonale e salute cardiovascolare
   const g = Math.round(w * 0.95);
-  // Carboidrati: il resto delle calorie per energia in allenamento e recupero
   const remainingKcal = Math.max(200, targetKcal - p * 4 - g * 9);
   const c = Math.round(remainingKcal / 4);
 
@@ -369,12 +390,43 @@ function extractBaseGrams(food) {
   return null;
 }
 
+function normalizeWorkouts(rawWorkouts, defaultBetweenRest = 180) {
+  const source = Array.isArray(rawWorkouts) && rawWorkouts.length > 0 ? rawWorkouts : INITIAL_WORKOUTS;
+  return source.map((wo) => ({
+    ...wo,
+    exercises: Array.isArray(wo.exercises)
+      ? wo.exercises.map((ex) => {
+          const setsCount = Math.max(1, Number(ex.sets) || 3);
+          const baseRest = Math.max(0, Number(ex.rest) || 90);
+          const transitions = Math.max(0, setsCount - 1);
+          const rawSetRests = Array.isArray(ex.setRests) ? ex.setRests : [];
+          const normalizedSetRests = Array.from({ length: transitions }, (_, idx) =>
+            typeof rawSetRests[idx] === 'number' && !isNaN(rawSetRests[idx])
+              ? Math.max(0, rawSetRests[idx])
+              : baseRest
+          );
+          return {
+            ...ex,
+            sets: setsCount,
+            rest: baseRest,
+            setRests: normalizedSetRests,
+            restAfterExercise:
+              typeof ex.restAfterExercise === 'number' && !isNaN(ex.restAfterExercise)
+                ? Math.max(0, ex.restAfterExercise)
+                : defaultBetweenRest,
+          };
+        })
+      : [],
+  }));
+}
+
 function normalizeData(raw) {
   const safe = raw && typeof raw === 'object' ? raw : {};
   const layout = safe.layout && typeof safe.layout === 'object' ? safe.layout : {};
   const bg = safe.background && typeof safe.background === 'object' ? safe.background : {};
   const ws = safe.waterSettings && typeof safe.waterSettings === 'object' ? safe.waterSettings : {};
   const bp = safe.bodyProfile && typeof safe.bodyProfile === 'object' ? safe.bodyProfile : {};
+  const globalBetweenRest = typeof safe.betweenExerciseRest === 'number' ? safe.betweenExerciseRest : 180;
 
   return {
     foods: Array.isArray(safe.foods) ? safe.foods : INITIAL_FOODS,
@@ -397,10 +449,10 @@ function normalizeData(raw) {
       goal: ['lean_bulk', 'recomp', 'bulk'].includes(bp.goal) ? bp.goal : INITIAL_BODY_PROFILE.goal,
       autoSyncWeight: typeof bp.autoSyncWeight === 'boolean' ? bp.autoSyncWeight : INITIAL_BODY_PROFILE.autoSyncWeight,
     },
-    workouts: Array.isArray(safe.workouts) && safe.workouts.length > 0 ? safe.workouts : INITIAL_WORKOUTS,
+    workouts: normalizeWorkouts(safe.workouts, globalBetweenRest),
     targets: safe.targets && typeof safe.targets === 'object' ? { ...INITIAL_TARGETS, ...safe.targets } : INITIAL_TARGETS,
     theme: safe.theme === 'light' ? 'light' : 'dark',
-    betweenExerciseRest: typeof safe.betweenExerciseRest === 'number' ? safe.betweenExerciseRest : 180,
+    betweenExerciseRest: globalBetweenRest,
     background: {
       type: ['default', 'preset', 'color', 'image'].includes(bg.type) ? bg.type : INITIAL_BACKGROUND.type,
       presetId: typeof bg.presetId === 'string' ? bg.presetId : INITIAL_BACKGROUND.presetId,
@@ -706,7 +758,6 @@ export default function App() {
     };
   }, [todayIso, syncRolloverDate]);
 
-  // Stati per Tracker Idratazione
   const [customWaterAmount, setCustomWaterAmount] = useState('');
   const [selectedDrinkType, setSelectedDrinkType] = useState('water');
   const [editingWaterConfig, setEditingWaterConfig] = useState(false);
@@ -727,6 +778,7 @@ export default function App() {
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerFinishedAlert, setTimerFinishedAlert] = useState(false);
   const [timerType, setTimerType] = useState('set');
+  const [timerLabel, setTimerLabel] = useState('');
 
   useEffect(() => {
     if (!timerRunning) return;
@@ -744,9 +796,10 @@ export default function App() {
     return () => clearInterval(interval);
   }, [timerRunning, soundEnabled]);
 
-  const startTimer = (seconds, type = 'set') => {
+  const startTimer = (seconds, type = 'set', label = '') => {
     setTimerFinishedAlert(false);
     setTimerType(type);
+    setTimerLabel(label);
     setTimerInitial(seconds);
     setTimerSeconds(seconds);
     setTimerRunning(true);
@@ -812,7 +865,6 @@ export default function App() {
   const [newWeight, setNewWeight] = useState('');
   const [newWeightNote, setNewWeightNote] = useState('');
 
-  // Stati Calcolatore Fabbisogno Peso + Altezza + Obiettivo
   const [editingTargets, setEditingTargets] = useState(false);
   const [tempTargets, setTempTargets] = useState(data.targets);
   const [tempBodyProfile, setTempBodyProfile] = useState(data.bodyProfile || INITIAL_BODY_PROFILE);
@@ -825,6 +877,7 @@ export default function App() {
     reps: '10-12',
     weight: '12',
     rest: '90',
+    restAfterExercise: '150',
     notes: '',
   });
 
@@ -1062,6 +1115,7 @@ export default function App() {
     setSelectedWaterDate(getLocalIsoDate(shifted));
   };
 
+  // --- GESTIONE AVANZATA PAUSE SERIE & ESERCIZI ---
   const toggleSetCompleted = (exercise, setIndex) => {
     const key = `${exercise.id}-${setIndex}`;
     const nextState = !completedSets[key];
@@ -1094,9 +1148,14 @@ export default function App() {
         }
       }
       if (allDone) {
-        startTimer(data.betweenExerciseRest || 180, 'exercise');
+        // Ultima serie completata: avvia la pausa specifica di transizione verso l'esercizio successivo
+        const exRest = getExerciseTransitionRest(exercise, data.betweenExerciseRest || 180);
+        startTimer(exRest, 'exercise', 'Verso es. succ.');
       } else {
-        startTimer(exercise.rest || 90, 'set');
+        // Serie intermedia completata: avvia la pausa specifica tra setIndex e setIndex + 1
+        const transitionIdx = Math.min(setIndex, Math.max(0, exercise.sets - 2));
+        const specificRest = getSetRestSeconds(exercise, transitionIdx);
+        startTimer(specificRest, 'set', `S${transitionIdx + 1}→S${transitionIdx + 2}`);
       }
     }
   };
@@ -1144,16 +1203,128 @@ export default function App() {
     }));
   };
 
+  const updateExerciseSetsCount = (workoutId, exerciseId, newSetsRaw) => {
+    const newSets = Math.max(1, Math.min(12, parseInt(newSetsRaw, 10) || 1));
+    setData((prev) => ({
+      ...prev,
+      workouts: prev.workouts.map((wo) => {
+        if (wo.id !== workoutId) return wo;
+        return {
+          ...wo,
+          exercises: wo.exercises.map((ex) => {
+            if (ex.id !== exerciseId) return ex;
+            const transitions = Math.max(0, newSets - 1);
+            const currentRests = Array.isArray(ex.setRests) ? ex.setRests : [];
+            const nextSetRests = Array.from({ length: transitions }, (_, idx) =>
+              typeof currentRests[idx] === 'number' ? currentRests[idx] : ex.rest || 90
+            );
+            return {
+              ...ex,
+              sets: newSets,
+              setRests: nextSetRests,
+            };
+          }),
+        };
+      }),
+    }));
+  };
+
+  const updateExerciseBaseRest = (workoutId, exerciseId, newRestRaw) => {
+    const newRest = Math.max(0, parseInt(newRestRaw, 10) || 0);
+    setData((prev) => ({
+      ...prev,
+      workouts: prev.workouts.map((wo) => {
+        if (wo.id !== workoutId) return wo;
+        return {
+          ...wo,
+          exercises: wo.exercises.map((ex) => {
+            if (ex.id !== exerciseId) return ex;
+            const transitions = Math.max(0, ex.sets - 1);
+            const nextSetRests = Array.from({ length: transitions }, () => newRest);
+            return {
+              ...ex,
+              rest: newRest,
+              setRests: nextSetRests,
+            };
+          }),
+        };
+      }),
+    }));
+  };
+
+  const updateExerciseSpecificSetRest = (workoutId, exerciseId, transitionIdx, secondsRaw) => {
+    const seconds = Math.max(0, parseInt(secondsRaw, 10) || 0);
+    setData((prev) => ({
+      ...prev,
+      workouts: prev.workouts.map((wo) => {
+        if (wo.id !== workoutId) return wo;
+        return {
+          ...wo,
+          exercises: wo.exercises.map((ex) => {
+            if (ex.id !== exerciseId) return ex;
+            const transitions = Math.max(0, ex.sets - 1);
+            const nextSetRests = Array.from({ length: transitions }, (_, idx) => {
+              if (idx === transitionIdx) return seconds;
+              return getSetRestSeconds(ex, idx);
+            });
+            return {
+              ...ex,
+              setRests: nextSetRests,
+            };
+          }),
+        };
+      }),
+    }));
+  };
+
+  const updateExerciseAfterRest = (workoutId, exerciseId, secondsRaw) => {
+    const seconds = Math.max(0, parseInt(secondsRaw, 10) || 0);
+    setData((prev) => ({
+      ...prev,
+      workouts: prev.workouts.map((wo) => {
+        if (wo.id !== workoutId) return wo;
+        return {
+          ...wo,
+          exercises: wo.exercises.map((ex) =>
+            ex.id === exerciseId ? { ...ex, restAfterExercise: seconds } : ex
+          ),
+        };
+      }),
+    }));
+  };
+
+  const applyGlobalBetweenRestToAll = (secondsRaw) => {
+    const seconds = Math.max(0, parseInt(secondsRaw, 10) || 180);
+    setData((prev) => ({
+      ...prev,
+      betweenExerciseRest: seconds,
+      workouts: prev.workouts.map((wo) =>
+        wo.id === activeWorkoutId
+          ? {
+              ...wo,
+              exercises: wo.exercises.map((ex) => ({ ...ex, restAfterExercise: seconds })),
+            }
+          : wo
+      ),
+    }));
+  };
+
   const handleAddExercise = (e) => {
     e.preventDefault();
     if (!newExercise.name.trim()) return;
+    const setsCount = Math.max(1, parseInt(newExercise.sets, 10) || 3);
+    const baseRest = Math.max(0, parseInt(newExercise.rest, 10) || 90);
+    const afterExRest = Math.max(0, parseInt(newExercise.restAfterExercise, 10) || 150);
+
     const created = {
       id: 'ex-' + Date.now(),
       name: newExercise.name.trim(),
-      sets: Math.max(1, parseInt(newExercise.sets, 10) || 3),
+      sets: setsCount,
       reps: newExercise.reps.trim() || '10',
       weight: Math.max(0, parseFloat(String(newExercise.weight).replace(',', '.')) || 0),
-      rest: Math.max(15, parseInt(newExercise.rest, 10) || 90),
+      rest: baseRest,
+      setRests: Array.from({ length: Math.max(0, setsCount - 1) }, () => baseRest),
+      restAfterExercise: afterExRest,
       notes: newExercise.notes.trim(),
     };
     setData((prev) => ({
@@ -1162,7 +1333,15 @@ export default function App() {
         wo.id === activeWorkoutId ? { ...wo, exercises: [...wo.exercises, created] } : wo
       ),
     }));
-    setNewExercise({ name: '', sets: '3', reps: '10-12', weight: '12', rest: '90', notes: '' });
+    setNewExercise({
+      name: '',
+      sets: '3',
+      reps: '10-12',
+      weight: '12',
+      rest: '90',
+      restAfterExercise: '150',
+      notes: '',
+    });
   };
 
   const handleDeleteExercise = (exerciseId) => {
@@ -1295,13 +1474,11 @@ export default function App() {
   const weightDeltaTotal =
     latestWeight && firstWeight ? (latestWeight.weight - firstWeight.weight).toFixed(1) : null;
 
-  // Anteprima live nel calcolatore Fabbisogno Peso + Altezza
   const liveCalcPreview = calculateSmartNutritionTargets(
     parseFloat(String(calcWeightInput).replace(',', '.')) || (latestWeight ? latestWeight.weight : 75),
     tempBodyProfile
   );
 
-  // Calcoli intelligenti Idratazione
   const getWaterTargetForDate = (dateStr) => {
     const ws = data.waterSettings || INITIAL_WATER_SETTINGS;
     if (!ws.autoCalculate) {
@@ -1451,7 +1628,6 @@ export default function App() {
   const cSky = isLight ? 'text-sky-600' : 'text-sky-400';
   const cRose = isLight ? 'text-rose-600' : 'text-rose-400';
 
-  // --- GRAFICO A TORTA (DONUT CHART) DEI MACRO GIORNALIERI ---
   const renderMacrosPieChart = () => {
     const pKcal = dayMacros.p * 4;
     const cKcal = dayMacros.c * 4;
@@ -1764,7 +1940,6 @@ export default function App() {
         </div>
 
         <div className={`grid grid-cols-1 lg:grid-cols-12 gap-3 pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/80'}`}>
-          {/* 4 Box Calorie & Macro */}
           <div className="lg:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
             <div className={`${cInner} rounded-xl p-3 border flex flex-col justify-between`}>
               <div>
@@ -1845,7 +2020,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Grafico a Torta Macros */}
           <div className="lg:col-span-4">
             {renderMacrosPieChart()}
           </div>
@@ -3006,7 +3180,7 @@ export default function App() {
               }`}
             >
               <Edit3 className="w-3.5 h-3.5" />
-              {workoutMode === 'edit' ? 'Workout Live' : 'Modifica Scheda'}
+              {workoutMode === 'edit' ? 'Workout Live' : 'Modifica Scheda & Pause'}
             </button>
 
             <button
@@ -3023,7 +3197,7 @@ export default function App() {
         {currentWorkout && (
           <div className={`pt-3 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/80'} space-y-3`}>
             {workoutMode === 'edit' ? (
-              <div className={`${cInner} border border-indigo-400/40 rounded-xl p-3.5 space-y-2.5`}>
+              <div className={`${cInner} border border-indigo-400/40 rounded-xl p-3.5 space-y-3`}>
                 <div className={`text-xs font-semibold ${cIndigo} flex items-center gap-1.5`}>
                   <Edit3 className="w-3.5 h-3.5" />
                   Modifica Nome e Dettagli della Scheda
@@ -3059,6 +3233,9 @@ export default function App() {
                       className={`w-full ${cInput} border rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-400`}
                     />
                   </div>
+                </div>
+                <div className={`text-[11px] ${cTextSecondary} pt-1 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/70'}`}>
+                  Suggerimento: qui sotto su ogni esercizio puoi personalizzare sia il tempo tra le singole serie (es. <strong>S1→S2: 120s</strong>, <strong>S2→S3: 90s</strong>) sia la pausa specifica verso l&apos;esercizio successivo.
                 </div>
               </div>
             ) : isEditingWorkoutTitle ? (
@@ -3132,18 +3309,17 @@ export default function App() {
                 <div className="flex flex-wrap items-center justify-between md:justify-end gap-2.5 sm:gap-3">
                   <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl ${cInner} border text-xs`}>
                     <SkipForward className={`w-3.5 h-3.5 ${cAmber} shrink-0`} />
-                    <span className={cTextSecondary}>Cambio es.:</span>
+                    <span className={cTextSecondary}>Imposta tutti es.:</span>
                     <select
                       value={data.betweenExerciseRest || 180}
-                      onChange={(e) =>
-                        setData((prev) => ({ ...prev, betweenExerciseRest: Number(e.target.value) }))
-                      }
+                      onChange={(e) => applyGlobalBetweenRestToAll(e.target.value)}
                       className={`bg-transparent font-bold ${cAmber} focus:outline-none cursor-pointer`}
                     >
-                      <option value={120} className={cOption}>2m (120s)</option>
-                      <option value={150} className={cOption}>2m30 (150s)</option>
-                      <option value={180} className={cOption}>3m (180s)</option>
-                      <option value={240} className={cOption}>4m (240s)</option>
+                      <option value={90} className={cOption}>90s</option>
+                      <option value={120} className={cOption}>120s (2m)</option>
+                      <option value={150} className={cOption}>150s (2m30)</option>
+                      <option value={180} className={cOption}>180s (3m)</option>
+                      <option value={240} className={cOption}>240s (4m)</option>
                     </select>
                   </div>
 
@@ -3177,117 +3353,271 @@ export default function App() {
       'Elenco Esercizi',
       currentWorkout ? (
         <div className="space-y-3 sm:space-y-3.5">
-          {currentWorkout.exercises.map((ex, exIdx) => (
-            <div
-              key={ex.id}
-              className={`${cCard} border rounded-2xl p-4 sm:p-5 space-y-3.5`}
-            >
-              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5 sm:gap-3">
-                <div>
-                  <div className="flex items-start gap-2">
-                    <span className={`text-xs font-bold ${cIndigo} bg-indigo-500/20 px-2 py-0.5 rounded-md mt-0.5 shrink-0`}>
-                      #{exIdx + 1}
-                    </span>
-                    <h3 className={`font-semibold text-sm sm:text-base ${cTextPrimary} leading-snug`}>{ex.name}</h3>
+          {currentWorkout.exercises.map((ex, exIdx) => {
+            const nextExercise = currentWorkout.exercises[exIdx + 1];
+            const transitionRest = getExerciseTransitionRest(ex, data.betweenExerciseRest || 180);
+            const customSetRestsActive = hasCustomPerSetRests(ex);
+
+            return (
+              <div
+                key={ex.id}
+                className={`${cCard} border rounded-2xl p-4 sm:p-5 space-y-3.5`}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5 sm:gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start gap-2">
+                      <span className={`text-xs font-bold ${cIndigo} bg-indigo-500/20 px-2 py-0.5 rounded-md mt-0.5 shrink-0`}>
+                        #{exIdx + 1}
+                      </span>
+                      <h3 className={`font-semibold text-sm sm:text-base ${cTextPrimary} leading-snug`}>{ex.name}</h3>
+                    </div>
+
+                    <div className={`flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs ${cTextSecondary} mt-1.5`}>
+                      <span>
+                        <strong className={cTextPrimary}>{ex.sets}</strong> serie ×{' '}
+                        <strong className={cTextPrimary}>{ex.reps}</strong> rip
+                      </span>
+
+                      <span className={`flex items-center gap-1 font-medium ${cIndigo}`}>
+                        <Clock className="w-3.5 h-3.5 shrink-0" />
+                        {customSetRestsActive ? (
+                          <span>
+                            Serie:{' '}
+                            {Array.from({ length: ex.sets - 1 })
+                              .map((_, i) => `S${i + 1}→S${i + 2}: ${getSetRestSeconds(ex, i)}s`)
+                              .join(' • ')}
+                          </span>
+                        ) : (
+                          <span>Tra serie: {ex.rest}s</span>
+                        )}
+                      </span>
+
+                      <span className={`flex items-center gap-1 font-medium ${cAmber}`}>
+                        <SkipForward className="w-3.5 h-3.5 shrink-0" />
+                        <span>
+                          {nextExercise
+                            ? `Dopo es. → #${exIdx + 2}: ${transitionRest}s`
+                            : `Fine scheda / defatic.: ${transitionRest}s`}
+                        </span>
+                      </span>
+                    </div>
+
+                    {ex.notes && <p className={`text-xs ${cTextSecondary} italic mt-1`}>Nota: {ex.notes}</p>}
                   </div>
-                  <div className={`flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs ${cTextSecondary} mt-1.5`}>
-                    <span>
-                      <strong className={cTextPrimary}>{ex.sets}</strong> serie ×{' '}
-                      <strong className={cTextPrimary}>{ex.reps}</strong> rip
-                    </span>
-                    <span className={`flex items-center gap-1 font-medium ${cIndigo}`}>
-                      <Clock className="w-3.5 h-3.5" /> Serie: {ex.rest}s
-                    </span>
-                    <span className={`flex items-center gap-1 font-medium ${cAmber}`}>
-                      <SkipForward className="w-3.5 h-3.5" /> Cambio es.: {data.betweenExerciseRest || 180}s
-                    </span>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-2 pt-1 sm:pt-0 shrink-0">
+                    {ex.weight > 0 || workoutMode === 'edit' ? (
+                      <div className={`flex items-center ${cInner} border rounded-xl p-1`}>
+                        <button
+                          onClick={() => updateExerciseWeight(currentWorkout.id, ex.id, -1)}
+                          className={`w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg active:bg-slate-500/20 ${cTextPrimary} font-bold text-base`}
+                        >
+                          -
+                        </button>
+                        <span className={`px-2.5 text-xs sm:text-sm font-bold ${cTextPrimary} min-w-[58px] text-center`}>
+                          {ex.weight === 0 ? 'BW' : `${ex.weight} kg`}
+                        </span>
+                        <button
+                          onClick={() => updateExerciseWeight(currentWorkout.id, ex.id, +1)}
+                          className={`w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg active:bg-slate-500/20 ${cTextPrimary} font-bold text-base`}
+                        >
+                          +
+                        </button>
+                      </div>
+                    ) : (
+                      <span className={`text-xs font-semibold px-3 py-2 rounded-xl ${cInner} border ${cTextSecondary}`}>
+                        Corpo Libero
+                      </span>
+                    )}
+
+                    {workoutMode === 'edit' && (
+                      <button
+                        onClick={() => handleDeleteExercise(ex.id)}
+                        className={`p-2.5 rounded-xl bg-rose-500/15 ${cRose} hover:bg-rose-500/25`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
-                  {ex.notes && <p className={`text-xs ${cTextSecondary} italic mt-1`}>Nota: {ex.notes}</p>}
                 </div>
 
-                <div className="flex items-center justify-between sm:justify-end gap-2 pt-1 sm:pt-0">
-                  {ex.weight > 0 || workoutMode === 'edit' ? (
-                    <div className={`flex items-center ${cInner} border rounded-xl p-1`}>
+                {/* PANNELLO CONFIGURAZIONE TEMPI DI PAUSA IN MODALITÀ MODIFICA */}
+                {workoutMode === 'edit' && (
+                  <div className={`${cInner} border border-indigo-400/35 rounded-xl p-3.5 space-y-3`}>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Numero Serie</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="12"
+                          value={ex.sets}
+                          onChange={(e) => updateExerciseSetsCount(currentWorkout.id, ex.id, e.target.value)}
+                          className={`w-full ${cInput} border rounded-xl px-3 py-1.5 font-semibold`}
+                        />
+                      </div>
+
+                      <div>
+                        <label className={`block text-[11px] ${cIndigo} font-semibold mb-1`}>
+                          Pausa Base Serie (sec)
+                        </label>
+                        <input
+                          type="number"
+                          step="5"
+                          min="0"
+                          value={ex.rest}
+                          onChange={(e) => updateExerciseBaseRest(currentWorkout.id, ex.id, e.target.value)}
+                          className={`w-full ${cInput} border rounded-xl px-3 py-1.5 font-semibold`}
+                        />
+                      </div>
+
+                      <div>
+                        <label className={`block text-[11px] ${cAmber} font-semibold mb-1`}>
+                          {nextExercise
+                            ? `Pausa verso #${exIdx + 2} (sec)`
+                            : 'Pausa Fine Esercizio (sec)'}
+                        </label>
+                        <input
+                          type="number"
+                          step="5"
+                          min="0"
+                          value={transitionRest}
+                          onChange={(e) => updateExerciseAfterRest(currentWorkout.id, ex.id, e.target.value)}
+                          className={`w-full ${cInput} border rounded-xl px-3 py-1.5 font-semibold`}
+                        />
+                      </div>
+                    </div>
+
+                    {ex.sets > 1 && (
+                      <div className={`pt-2.5 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/70'} space-y-2`}>
+                        <div className={`text-[11px] font-semibold ${cTextSecondary} flex items-center gap-1.5`}>
+                          <Clock className={`w-3.5 h-3.5 ${cIndigo}`} />
+                          <span>Recupero specifico tra singole serie (in secondi):</span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {Array.from({ length: ex.sets - 1 }).map((_, tIdx) => (
+                            <div
+                              key={tIdx}
+                              className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border ${cCard}`}
+                            >
+                              <span className={`text-xs font-bold ${cIndigo} whitespace-nowrap`}>
+                                S{tIdx + 1} → S{tIdx + 2}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  step="5"
+                                  min="0"
+                                  value={getSetRestSeconds(ex, tIdx)}
+                                  onChange={(e) =>
+                                    updateExerciseSpecificSetRest(currentWorkout.id, ex.id, tIdx, e.target.value)
+                                  }
+                                  className={`w-16 ${cInput} border rounded-md px-1.5 py-1 text-center font-bold text-xs`}
+                                />
+                                <span className={`text-[10px] ${cTextSecondary}`}>s</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* MODALITÀ WORKOUT LIVE */}
+                {workoutMode === 'live' && (
+                  <div className="space-y-2 pt-1">
+                    <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+                      {Array.from({ length: ex.sets }).map((_, setIdx) => {
+                        const isDone = !!completedSets[`${ex.id}-${setIdx}`];
+                        const hasNextSet = setIdx < ex.sets - 1;
+                        const nextRestLabel = hasNextSet
+                          ? `${getSetRestSeconds(ex, setIdx)}s`
+                          : `${transitionRest}s es.`;
+
+                        return (
+                          <button
+                            key={setIdx}
+                            onClick={() => toggleSetCompleted(ex, setIdx)}
+                            className={`sm:flex-1 sm:min-w-[96px] py-3 sm:py-2.5 px-3 rounded-xl font-semibold text-xs sm:text-sm flex flex-col items-center justify-center gap-0.5 border transition active:scale-95 ${
+                              isDone
+                                ? 'bg-emerald-500 border-emerald-400 text-white shadow-sm shadow-emerald-500/25'
+                                : `${cInner} ${cTextPrimary} hover:border-slate-500`
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              {isDone ? (
+                                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                              ) : (
+                                <Circle className="w-4 h-4 shrink-0 text-slate-400" />
+                              )}
+                              <span>Serie {setIdx + 1}</span>
+                            </div>
+                            <span
+                              className={`text-[10px] font-medium ${
+                                isDone ? 'text-emerald-100' : cTextSecondary
+                              }`}
+                            >
+                              → {nextRestLabel}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {ex.sets > 1 && customSetRestsActive ? (
+                        Array.from({ length: ex.sets - 1 }).map((_, tIdx) => {
+                          const secVal = getSetRestSeconds(ex, tIdx);
+                          return (
+                            <button
+                              key={tIdx}
+                              onClick={() => startTimer(secVal, 'set', `S${tIdx + 1}→S${tIdx + 2}`)}
+                              title={`Avvia recupero tra Serie ${tIdx + 1} e Serie ${tIdx + 2}`}
+                              className={`flex-1 min-w-[115px] py-2.5 px-3 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/40 ${cIndigo} text-xs font-semibold flex items-center justify-center gap-1.5`}
+                            >
+                              <Clock className="w-3.5 h-3.5 shrink-0" />
+                              <span>
+                                S{tIdx + 1}→S{tIdx + 2} ({secVal}s)
+                              </span>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <button
+                          onClick={() => startTimer(ex.rest || 90, 'set', 'Tra Serie')}
+                          title="Avvia pausa tra una serie e l'altra"
+                          className={`flex-1 min-w-[130px] py-2.5 px-3 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/40 ${cIndigo} text-xs font-semibold flex items-center justify-center gap-1.5`}
+                        >
+                          <Clock className="w-3.5 h-3.5 shrink-0" />
+                          <span>Pausa Serie ({ex.rest}s)</span>
+                        </button>
+                      )}
+
                       <button
-                        onClick={() => updateExerciseWeight(currentWorkout.id, ex.id, -1)}
-                        className={`w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg active:bg-slate-500/20 ${cTextPrimary} font-bold text-base`}
+                        onClick={() =>
+                          startTimer(
+                            transitionRest,
+                            'exercise',
+                            nextExercise ? `Verso #${exIdx + 2}` : 'Fine Scheda'
+                          )
+                        }
+                        title="Avvia pausa di transizione verso l'esercizio successivo"
+                        className={`flex-1 min-w-[150px] py-2.5 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 ${cAmber} text-xs font-semibold flex items-center justify-center gap-1.5`}
                       >
-                        -
-                      </button>
-                      <span className={`px-2.5 text-xs sm:text-sm font-bold ${cTextPrimary} min-w-[58px] text-center`}>
-                        {ex.weight === 0 ? 'BW' : `${ex.weight} kg`}
-                      </span>
-                      <button
-                        onClick={() => updateExerciseWeight(currentWorkout.id, ex.id, +1)}
-                        className={`w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg active:bg-slate-500/20 ${cTextPrimary} font-bold text-base`}
-                      >
-                        +
+                        <SkipForward className="w-3.5 h-3.5 shrink-0" />
+                        <span>
+                          {nextExercise
+                            ? `Verso #${exIdx + 2} (${transitionRest}s)`
+                            : `Fine Scheda (${transitionRest}s)`}
+                        </span>
                       </button>
                     </div>
-                  ) : (
-                    <span className={`text-xs font-semibold px-3 py-2 rounded-xl ${cInner} border ${cTextSecondary}`}>
-                      Corpo Libero
-                    </span>
-                  )}
-
-                  {workoutMode === 'edit' && (
-                    <button
-                      onClick={() => handleDeleteExercise(ex.id)}
-                      className={`p-2.5 rounded-xl bg-rose-500/15 ${cRose} hover:bg-rose-500/25`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
-
-              {workoutMode === 'live' && (
-                <div className="space-y-2 pt-1">
-                  <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-                    {Array.from({ length: ex.sets }).map((_, setIdx) => {
-                      const isDone = !!completedSets[`${ex.id}-${setIdx}`];
-                      return (
-                        <button
-                          key={setIdx}
-                          onClick={() => toggleSetCompleted(ex, setIdx)}
-                          className={`sm:flex-1 sm:min-w-[82px] py-3.5 sm:py-3 px-3 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 border transition active:scale-95 ${
-                            isDone
-                              ? 'bg-emerald-500 border-emerald-400 text-white shadow-sm shadow-emerald-500/25'
-                              : `${cInner} ${cTextPrimary} hover:border-slate-500`
-                          }`}
-                        >
-                          {isDone ? (
-                            <CheckCircle2 className="w-4 h-4 shrink-0" />
-                          ) : (
-                            <Circle className="w-4 h-4 shrink-0 text-slate-400" />
-                          )}
-                          Serie {setIdx + 1}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:flex gap-2">
-                    <button
-                      onClick={() => startTimer(ex.rest || 90, 'set')}
-                      title="Avvia pausa tra una serie e l'altra"
-                      className={`py-2.5 px-3 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/40 ${cIndigo} text-xs font-semibold flex items-center justify-center gap-1.5`}
-                    >
-                      <Clock className="w-3.5 h-3.5" /> Pausa Serie ({ex.rest}s)
-                    </button>
-
-                    <button
-                      onClick={() => startTimer(data.betweenExerciseRest || 180, 'exercise')}
-                      title="Avvia pausa di transizione al prossimo esercizio"
-                      className={`py-2.5 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 ${cAmber} text-xs font-semibold flex items-center justify-center gap-1.5`}
-                    >
-                      <SkipForward className="w-3.5 h-3.5" /> Cambio Esercizio
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
 
           {workoutMode === 'edit' && (
             <form
@@ -3312,7 +3642,7 @@ export default function App() {
                   className={`${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
                 />
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 sm:gap-3">
                 <div>
                   <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Serie</label>
                   <input
@@ -3344,13 +3674,24 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className={`block text-[11px] ${cTextSecondary} mb-1`}>Recupero (sec)</label>
+                  <label className={`block text-[11px] ${cIndigo} mb-1`}>Pausa Serie (sec)</label>
                   <input
                     type="number"
-                    step="15"
-                    min="15"
+                    step="5"
+                    min="0"
                     value={newExercise.rest}
                     onChange={(e) => setNewExercise({ ...newExercise, rest: e.target.value })}
+                    className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
+                  />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className={`block text-[11px] ${cAmber} mb-1`}>Pausa Es. Succ. (sec)</label>
+                  <input
+                    type="number"
+                    step="5"
+                    min="0"
+                    value={newExercise.restAfterExercise}
+                    onChange={(e) => setNewExercise({ ...newExercise, restAfterExercise: e.target.value })}
                     className={`w-full ${cInput} border rounded-xl px-3 py-2.5 sm:py-2`}
                   />
                 </div>
@@ -3835,7 +4176,6 @@ export default function App() {
                           </button>
                         </div>
 
-                        {/* Sezione Calcolo Antropometrico */}
                         <div className={`${cInner} border rounded-xl p-3.5 space-y-3`}>
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className={`text-xs font-semibold ${cTextPrimary}`}>
@@ -3977,7 +4317,6 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Campi Target Modificabili */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
                           {[
                             { key: 'kcal', label: 'Calorie Target (kcal)' },
@@ -4100,7 +4439,7 @@ export default function App() {
                     : `bg-indigo-500/20 ${cIndigo}`
                 }`}
               >
-                {timerType === 'exercise' ? 'Cambio Es.' : 'Tra Serie'}
+                {timerLabel || (timerType === 'exercise' ? 'Cambio Es.' : 'Tra Serie')}
               </span>
             </div>
 
@@ -4165,7 +4504,7 @@ export default function App() {
               {[60, 90, 120].map((sec) => (
                 <button
                   key={sec}
-                  onClick={() => startTimer(sec, 'set')}
+                  onClick={() => startTimer(sec, 'set', 'Tra Serie')}
                   className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
                     timerType === 'set' && timerInitial === sec
                       ? `bg-indigo-500/25 border-indigo-400/60 ${cIndigo}`
@@ -4183,10 +4522,10 @@ export default function App() {
               <span className={`text-[10px] uppercase font-bold ${cAmber} mr-0.5`}>
                 Es.:
               </span>
-              {[150, 180, 240].map((sec) => (
+              {[120, 150, 180].map((sec) => (
                 <button
                   key={sec}
-                  onClick={() => startTimer(sec, 'exercise')}
+                  onClick={() => startTimer(sec, 'exercise', 'Cambio Es.')}
                   className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
                     timerType === 'exercise' && timerInitial === sec
                       ? `bg-amber-500/25 border-amber-400/60 ${cAmber}`
