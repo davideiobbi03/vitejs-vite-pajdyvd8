@@ -137,17 +137,17 @@ const EMPTY_WEEKLY_PLAN = {
 };
 
 const INITIAL_FOODS = [
-  { id: 'f1', name: 'Yogurt Greco 0% (250g)', kcal: 145, p: 25, c: 9, sugars: 9, g: 0 },
-  { id: 'f2', name: 'Muesli Croccante / Avena (60g)', kcal: 230, p: 6, c: 39, sugars: 8, g: 5 },
-  { id: 'f3', name: 'Mandorle & Noci (20g)', kcal: 125, p: 4, c: 2, sugars: 1, g: 11 },
-  { id: 'f4', name: 'Cioccolato Fondente 90% (15g)', kcal: 88, p: 1.5, c: 2, sugars: 1.1, g: 8 },
-  { id: 'f5', name: 'Pasta di Semola (120g)', kcal: 425, p: 15, c: 86, sugars: 3.5, g: 1.8 },
-  { id: 'f6', name: 'Petto di Pollo / Tenders (200g)', kcal: 220, p: 46, c: 0, sugars: 0, g: 3 },
-  { id: 'f7', name: 'Olio Extravergine d’Oliva (15g)', kcal: 135, p: 0, c: 0, sugars: 0, g: 15 },
-  { id: 'f8', name: 'Riso Basmati (100g)', kcal: 350, p: 8, c: 78, sugars: 0.2, g: 0.8 },
+  { id: 'f1', name: 'Yogurt Greco 0% (250g)', baseGrams: 250, kcal: 145, p: 25, c: 9, sugars: 9, g: 0 },
+  { id: 'f2', name: 'Muesli Croccante / Avena (60g)', baseGrams: 60, kcal: 230, p: 6, c: 39, sugars: 8, g: 5 },
+  { id: 'f3', name: 'Mandorle & Noci (20g)', baseGrams: 20, kcal: 125, p: 4, c: 2, sugars: 1, g: 11 },
+  { id: 'f4', name: 'Cioccolato Fondente 90% (15g)', baseGrams: 15, kcal: 88, p: 1.5, c: 2, sugars: 1.1, g: 8 },
+  { id: 'f5', name: 'Pasta di Semola (120g)', baseGrams: 120, kcal: 425, p: 15, c: 86, sugars: 3.5, g: 1.8 },
+  { id: 'f6', name: 'Petto di Pollo / Tenders (200g)', baseGrams: 200, kcal: 220, p: 46, c: 0, sugars: 0, g: 3 },
+  { id: 'f7', name: 'Olio Extravergine d’Oliva (15g)', baseGrams: 15, kcal: 135, p: 0, c: 0, sugars: 0, g: 15 },
+  { id: 'f8', name: 'Riso Basmati (100g)', baseGrams: 100, kcal: 350, p: 8, c: 78, sugars: 0.2, g: 0.8 },
   { id: 'f9', name: 'Uova Intere Medie (3 uova)', kcal: 215, p: 19, c: 1.5, sugars: 1.5, g: 15 },
-  { id: 'f10', name: 'Lenticchie Lessate (150g)', kcal: 140, p: 10, c: 22, sugars: 1.8, g: 0.6 },
-  { id: 'f11', name: 'Banana Media (120g)', kcal: 105, p: 1.3, c: 27, sugars: 14.5, g: 0.4 },
+  { id: 'f10', name: 'Lenticchie Lessate (150g)', baseGrams: 150, kcal: 140, p: 10, c: 22, sugars: 1.8, g: 0.6 },
+  { id: 'f11', name: 'Banana Media (120g)', baseGrams: 120, kcal: 105, p: 1.3, c: 27, sugars: 14.5, g: 0.4 },
 ];
 
 const INITIAL_MEALS = [
@@ -901,13 +901,19 @@ export default function App() {
     };
   };
 
+  // --- STATI ALIMENTI SINGOLI (CREAZIONE & MODIFICA) ---
   const [newFood, setNewFood] = useState({ name: '', baseGrams: '100', kcal: '', p: '', c: '', sugars: '', g: '' });
+  const [editingFoodId, setEditingFoodId] = useState(null);
+
+  // --- STATI PASTI ASSEMBLATI (CREAZIONE & MODIFICA) ---
+  const [editingMealId, setEditingMealId] = useState(null);
   const [mealName, setMealName] = useState('');
   const [mealItems, setMealItems] = useState([]);
   const [selectedFoodToAdd, setSelectedFoodToAdd] = useState('');
   const [qtyInputMode, setQtyInputMode] = useState('portion');
   const [selectedFoodQty, setSelectedFoodQty] = useState('1');
   const [selectedFoodGrams, setSelectedFoodGrams] = useState('100');
+
   const [newWeight, setNewWeight] = useState('');
   const [newWeightNote, setNewWeightNote] = useState('');
 
@@ -941,7 +947,28 @@ export default function App() {
     }
   };
 
-  const handleAddFood = (e) => {
+  // Avvia la modifica di un alimento singolo esistente
+  const startEditFood = (food) => {
+    const cleanName = String(food.name || '').replace(/\s*\(\d+(?:[.,]\d+)?\s*(?:g|gr|ml)\)\s*$/i, '').trim();
+    const bg = extractBaseGrams(food);
+    setEditingFoodId(food.id);
+    setNewFood({
+      name: cleanName || food.name,
+      baseGrams: bg ? String(bg) : '',
+      kcal: String(food.kcal ?? ''),
+      p: String(food.p ?? ''),
+      c: String(food.c ?? ''),
+      sugars: String(food.sugars ?? ''),
+      g: String(food.g ?? ''),
+    });
+  };
+
+  const cancelEditFood = () => {
+    setEditingFoodId(null);
+    setNewFood({ name: '', baseGrams: '100', kcal: '', p: '', c: '', sugars: '', g: '' });
+  };
+
+  const handleSaveFood = (e) => {
     e.preventDefault();
     if (!newFood.name.trim()) return;
     const rawName = newFood.name.trim();
@@ -952,8 +979,7 @@ export default function App() {
         ? `${rawName} (${parsedBaseG}g)`
         : rawName;
 
-    const created = {
-      id: 'f-' + Date.now(),
+    const foodPayload = {
       name: formattedName,
       baseGrams: !isNaN(parsedBaseG) && parsedBaseG > 0 ? parsedBaseG : undefined,
       kcal: Number(String(newFood.kcal).replace(',', '.')) || 0,
@@ -962,11 +988,26 @@ export default function App() {
       sugars: Number(String(newFood.sugars).replace(',', '.')) || 0,
       g: Number(String(newFood.g).replace(',', '.')) || 0,
     };
-    setData((prev) => ({ ...prev, foods: [created, ...prev.foods] }));
+
+    if (editingFoodId) {
+      setData((prev) => ({
+        ...prev,
+        foods: prev.foods.map((f) => (f.id === editingFoodId ? { ...f, ...foodPayload } : f)),
+      }));
+      setEditingFoodId(null);
+    } else {
+      const created = {
+        id: 'f-' + Date.now(),
+        ...foodPayload,
+      };
+      setData((prev) => ({ ...prev, foods: [created, ...prev.foods] }));
+    }
+
     setNewFood({ name: '', baseGrams: '100', kcal: '', p: '', c: '', sugars: '', g: '' });
   };
 
   const handleDeleteFood = (id) => {
+    if (editingFoodId === id) cancelEditFood();
     setData((prev) => ({
       ...prev,
       foods: prev.foods.filter((f) => f.id !== id),
@@ -983,11 +1024,11 @@ export default function App() {
     if (qtyInputMode === 'grams' && baseG) {
       const gVal = parseFloat(String(selectedFoodGrams).replace(',', '.'));
       if (isNaN(gVal) || gVal <= 0) return;
-      finalQty = Number((gVal / baseG).toFixed(3));
+      finalQty = Number((gVal / baseG).toFixed(4));
     } else {
       const pVal = parseFloat(String(selectedFoodQty).replace(',', '.'));
       if (isNaN(pVal) || pVal <= 0) return;
-      finalQty = Number(pVal.toFixed(3));
+      finalQty = Number(pVal.toFixed(4));
     }
 
     setMealItems((prev) => [...prev, { foodId: fId, qty: finalQty }]);
@@ -999,22 +1040,59 @@ export default function App() {
     const parsed = parseFloat(String(nextQty).replace(',', '.'));
     if (isNaN(parsed) || parsed <= 0) return;
     setMealItems((prev) =>
-      prev.map((item, idx) => (idx === index ? { ...item, qty: Number(parsed.toFixed(3)) } : item))
+      prev.map((item, idx) => (idx === index ? { ...item, qty: Number(parsed.toFixed(4)) } : item))
     );
+  };
+
+  const handleUpdateMealItemGrams = (index, nextGramsRaw, baseGrams) => {
+    if (!baseGrams || baseGrams <= 0) return;
+    const parsedGrams = parseFloat(String(nextGramsRaw).replace(',', '.'));
+    if (isNaN(parsedGrams) || parsedGrams <= 0) return;
+    const nextQty = Number((parsedGrams / baseGrams).toFixed(4));
+    setMealItems((prev) =>
+      prev.map((item, idx) => (idx === index ? { ...item, qty: nextQty } : item))
+    );
+  };
+
+  // Carica un pasto assemblato nel compositore per modificarlo
+  const startEditComposedMeal = (meal) => {
+    setEditingMealId(meal.id);
+    setMealName(meal.name);
+    setMealItems(meal.items.map((it) => ({ foodId: it.foodId, qty: it.qty })));
+    setNutritionSubTab('composer');
+  };
+
+  const cancelEditComposedMeal = () => {
+    setEditingMealId(null);
+    setMealName('');
+    setMealItems([]);
   };
 
   const handleSaveComposedMeal = (e) => {
     e.preventDefault();
     if (!mealName.trim() || mealItems.length === 0) return;
-    const createdMeal = {
-      id: 'm-' + Date.now(),
-      name: mealName.trim(),
-      items: mealItems,
-    };
-    setData((prev) => ({ ...prev, meals: [createdMeal, ...prev.meals] }));
-    setMealName('');
-    setMealItems([]);
-    setNutritionSubTab('planner');
+
+    if (editingMealId) {
+      setData((prev) => ({
+        ...prev,
+        meals: prev.meals.map((m) =>
+          m.id === editingMealId ? { ...m, name: mealName.trim(), items: mealItems } : m
+        ),
+      }));
+      setEditingMealId(null);
+      setMealName('');
+      setMealItems([]);
+    } else {
+      const createdMeal = {
+        id: 'm-' + Date.now(),
+        name: mealName.trim(),
+        items: mealItems,
+      };
+      setData((prev) => ({ ...prev, meals: [createdMeal, ...prev.meals] }));
+      setMealName('');
+      setMealItems([]);
+      setNutritionSubTab('planner');
+    }
   };
 
   // Assegna un pasto assemblato ("meal:<id>") oppure un cibo singolo ("food:<id>") allo slot
@@ -1049,7 +1127,7 @@ export default function App() {
   const updateSlotEntryQty = (day, slot, indexToUpdate, nextQtyRaw) => {
     const parsed = parseFloat(String(nextQtyRaw).replace(',', '.'));
     if (isNaN(parsed) || parsed <= 0) return;
-    const cleanQty = Number(parsed.toFixed(3));
+    const cleanQty = Number(parsed.toFixed(4));
 
     setData((prev) => {
       const currentSlot = prev.weeklyPlan[day]?.[slot] || [];
@@ -1070,6 +1148,15 @@ export default function App() {
         },
       };
     });
+  };
+
+  // Aggiorna i grammi diretti di un cibo singolo nello slot
+  const updateSlotEntryGrams = (day, slot, indexToUpdate, nextGramsRaw, baseGrams) => {
+    if (!baseGrams || baseGrams <= 0) return;
+    const parsedGrams = parseFloat(String(nextGramsRaw).replace(',', '.'));
+    if (isNaN(parsedGrams) || parsedGrams <= 0) return;
+    const cleanQty = Number((parsedGrams / baseGrams).toFixed(4));
+    updateSlotEntryQty(day, slot, indexToUpdate, cleanQty);
   };
 
   const removeMealFromSlot = (day, slot, indexToRemove) => {
@@ -1451,15 +1538,14 @@ export default function App() {
         meals: [],
         weeklyPlan: JSON.parse(JSON.stringify(EMPTY_WEEKLY_PLAN)),
       }));
-      setMealName('');
-      setMealItems([]);
+      cancelEditComposedMeal();
     } else if (nutritionSubTab === 'foods') {
       if (!window.confirm('Vuoi azzerare a 0 tutto il database alimenti?')) return;
       setData((prev) => ({
         ...prev,
         foods: [],
       }));
-      setNewFood({ name: '', baseGrams: '100', kcal: '', p: '', c: '', sugars: '', g: '' });
+      cancelEditFood();
     } else if (nutritionSubTab === 'water') {
       if (!window.confirm(`Vuoi azzerare a 0 tutte le bevute registrate per il ${selectedWaterDate}?`)) return;
       setData((prev) => ({
@@ -1542,6 +1628,8 @@ export default function App() {
       })
     );
     setCompletedSets({});
+    cancelEditFood();
+    cancelEditComposedMeal();
   };
 
   const dayMacros = getDayMacros(selectedDay);
@@ -2144,6 +2232,7 @@ export default function App() {
                         if (!food) return null;
                         const q = entry.qty || 1;
                         const baseGrams = extractBaseGrams(food);
+                        const currentGrams = baseGrams ? Math.round(q * baseGrams) : null;
                         const macros = {
                           kcal: food.kcal * q,
                           p: food.p * q,
@@ -2185,19 +2274,32 @@ export default function App() {
                               </button>
                             </div>
 
-                            {/* Regolazione rapida dose/grammi per cibo singolo */}
-                            <div className={`pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/70'} flex items-center justify-between gap-2 text-xs`}>
-                              <span className={`text-[11px] ${cTextSecondary}`}>
-                                Dose:{' '}
-                                <strong className={cTextPrimary}>
-                                  {q}x{baseGrams ? ` (~${Math.round(q * baseGrams)}g)` : ''}
-                                </strong>
-                              </span>
-                              <div className="flex items-center gap-1">
+                            {/* Regolazione rapida grammi e porzioni per cibo singolo */}
+                            <div className={`pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/70'} flex flex-wrap items-center justify-between gap-2 text-xs`}>
+                              {baseGrams ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    step="1"
+                                    min="1"
+                                    value={currentGrams}
+                                    onChange={(e) =>
+                                      updateSlotEntryGrams(selectedDay, slot, idx, e.target.value, baseGrams)
+                                    }
+                                    aria-label="Grammi"
+                                    className={`w-16 ${cInput} border rounded-md px-1.5 py-0.5 text-center font-bold text-xs focus:outline-none focus:border-sky-400`}
+                                  />
+                                  <span className={`text-[11px] font-semibold ${cSky}`}>g</span>
+                                </div>
+                              ) : (
+                                <span className={`text-[11px] ${cTextSecondary}`}>Dose:</span>
+                              )}
+
+                              <div className="flex items-center gap-1 ml-auto">
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    updateSlotEntryQty(selectedDay, slot, idx, Math.max(0.25, Number((q - 0.25).toFixed(2))))
+                                    updateSlotEntryQty(selectedDay, slot, idx, Math.max(0.1, Number((q - 0.25).toFixed(3))))
                                   }
                                   className={`w-6 h-6 rounded-md border font-bold flex items-center justify-center ${cCard} ${cTextPrimary}`}
                                 >
@@ -2206,15 +2308,17 @@ export default function App() {
                                 <input
                                   type="number"
                                   step="any"
-                                  min="0.05"
-                                  value={q}
+                                  min="0.01"
+                                  value={Number(q.toFixed(2))}
                                   onChange={(e) => updateSlotEntryQty(selectedDay, slot, idx, e.target.value)}
-                                  className={`w-12 ${cInput} border rounded-md px-1 py-0.5 text-center font-bold text-xs`}
+                                  aria-label="Porzioni"
+                                  className={`w-12 ${cInput} border rounded-md px-1 py-0.5 text-center font-bold text-xs focus:outline-none focus:border-emerald-400`}
                                 />
+                                <span className={`text-[10px] font-semibold ${cTextSecondary}`}>x</span>
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    updateSlotEntryQty(selectedDay, slot, idx, Number((q + 0.25).toFixed(2)))
+                                    updateSlotEntryQty(selectedDay, slot, idx, Number((q + 0.25).toFixed(3)))
                                   }
                                   className={`w-6 h-6 rounded-md border font-bold flex items-center justify-center ${cCard} ${cTextPrimary}`}
                                 >
@@ -2253,12 +2357,22 @@ export default function App() {
                               <span>• G: {Math.round(macros.g)}g</span>
                             </div>
                           </div>
-                          <button
-                            onClick={() => removeMealFromSlot(selectedDay, slot, idx)}
-                            className={`p-1.5 ${cTextSecondary} hover:text-rose-400 rounded-lg transition shrink-0`}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => startEditComposedMeal(meal)}
+                              title="Modifica questo pasto assemblato"
+                              className={`p-1.5 ${cTextSecondary} hover:text-emerald-400 rounded-lg transition`}
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => removeMealFromSlot(selectedDay, slot, idx)}
+                              className={`p-1.5 ${cTextSecondary} hover:text-rose-400 rounded-lg transition`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -2324,9 +2438,29 @@ export default function App() {
     composerForm: renderReorderWrapper(
       'composer',
       'composerForm',
-      'Crea Nuovo Pasto',
-      <div className={`${cCard} border rounded-2xl p-4 sm:p-5 space-y-4`}>
-        <h3 className={`font-semibold text-base ${cEmerald}`}>Componi un Nuovo Pasto Ricorrente</h3>
+      editingMealId ? 'Modifica Pasto Assemblato' : 'Crea Nuovo Pasto',
+      <div className={`${cCard} border ${editingMealId ? 'border-amber-400/60' : ''} rounded-2xl p-4 sm:p-5 space-y-4`}>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className={`font-semibold text-base ${editingMealId ? cAmber : cEmerald} flex items-center gap-2`}>
+            {editingMealId ? (
+              <>
+                <Edit3 className="w-4 h-4" /> Modifica Pasto Assemblato
+              </>
+            ) : (
+              'Componi un Nuovo Pasto Ricorrente'
+            )}
+          </h3>
+          {editingMealId && (
+            <button
+              type="button"
+              onClick={cancelEditComposedMeal}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1 ${cInner} ${cTextSecondary} hover:text-rose-400`}
+            >
+              <X className="w-3.5 h-3.5" /> Annulla modifica
+            </button>
+          )}
+        </div>
+
         <form onSubmit={handleSaveComposedMeal} className="space-y-4">
           <div>
             <label className={`block text-xs ${cTextSecondary} mb-1`}>Nome del Pasto</label>
@@ -2518,12 +2652,13 @@ export default function App() {
           {mealItems.length > 0 && (
             <div className="space-y-2">
               <div className={`text-xs font-semibold ${cTextSecondary}`}>
-                Ingredienti nel pasto (puoi modificare la quantità anche qui):
+                Ingredienti nel pasto (modifica grammi o moltiplicatore):
               </div>
               {mealItems.map((it, idx) => {
                 const food = getFoodById(it.foodId);
                 if (!food) return null;
                 const itemBaseG = extractBaseGrams(food);
+                const currentItemGrams = itemBaseG ? Math.round(it.qty * itemBaseG) : null;
                 return (
                   <div
                     key={idx}
@@ -2536,38 +2671,56 @@ export default function App() {
                         {Math.round(food.c * it.qty)}g
                         {Number(food.sugars) > 0 ? ` (zucch. ${Math.round((Number(food.sugars) || 0) * it.qty)}g)` : ''} • G:{' '}
                         {Math.round(food.g * it.qty)}g
-                        {itemBaseG ? ` • ~${Math.round(it.qty * itemBaseG)}g` : ''}
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-end gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateMealItemQty(idx, Math.max(0.05, it.qty - 0.25))}
-                        className={`w-7 h-7 rounded-lg border font-bold ${cCard} ${cTextPrimary}`}
-                      >
-                        -
-                      </button>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0.01"
-                        value={it.qty}
-                        onChange={(e) => handleUpdateMealItemQty(idx, e.target.value)}
-                        className={`w-16 ${cInput} border rounded-lg px-1.5 py-1 text-center font-bold text-xs`}
-                      />
-                      <span className={`text-[11px] font-semibold ${cEmerald}`}>x</span>
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateMealItemQty(idx, it.qty + 0.25)}
-                        className={`w-7 h-7 rounded-lg border font-bold ${cCard} ${cTextPrimary}`}
-                      >
-                        +
-                      </button>
+                    <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+                      {itemBaseG && (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            step="1"
+                            min="1"
+                            value={currentItemGrams}
+                            onChange={(e) => handleUpdateMealItemGrams(idx, e.target.value, itemBaseG)}
+                            aria-label="Grammi ingrediente"
+                            className={`w-16 ${cInput} border rounded-lg px-1.5 py-1 text-center font-bold text-xs focus:outline-none focus:border-sky-400`}
+                          />
+                          <span className={`text-[11px] font-semibold ${cSky}`}>g</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateMealItemQty(idx, Math.max(0.05, it.qty - 0.25))}
+                          className={`w-7 h-7 rounded-lg border font-bold ${cCard} ${cTextPrimary}`}
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0.01"
+                          value={Number(it.qty.toFixed(2))}
+                          onChange={(e) => handleUpdateMealItemQty(idx, e.target.value)}
+                          aria-label="Porzioni ingrediente"
+                          className={`w-14 ${cInput} border rounded-lg px-1.5 py-1 text-center font-bold text-xs`}
+                        />
+                        <span className={`text-[11px] font-semibold ${cEmerald}`}>x</span>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateMealItemQty(idx, it.qty + 0.25)}
+                          className={`w-7 h-7 rounded-lg border font-bold ${cCard} ${cTextPrimary}`}
+                        >
+                          +
+                        </button>
+                      </div>
+
                       <button
                         type="button"
                         onClick={() => setMealItems((prev) => prev.filter((_, i) => i !== idx))}
-                        className={`p-1.5 ml-1 ${cTextSecondary} hover:text-rose-400`}
+                        className={`p-1.5 ${cTextSecondary} hover:text-rose-400`}
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -2596,13 +2749,28 @@ export default function App() {
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={!mealName.trim() || mealItems.length === 0}
-            className="w-full py-3 sm:py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white font-bold text-sm transition"
-          >
-            Salva Pasto nel Ricettario
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            {editingMealId && (
+              <button
+                type="button"
+                onClick={cancelEditComposedMeal}
+                className={`py-3 sm:py-2.5 px-4 rounded-xl border font-semibold text-sm transition ${cInner} ${cTextSecondary}`}
+              >
+                Annulla
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={!mealName.trim() || mealItems.length === 0}
+              className={`flex-1 py-3 sm:py-2.5 rounded-xl ${
+                editingMealId
+                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                  : 'bg-emerald-500 hover:bg-emerald-400 text-white'
+              } disabled:opacity-40 font-bold text-sm transition`}
+            >
+              {editingMealId ? 'Aggiorna Pasto Assemblato' : 'Salva Pasto nel Ricettario'}
+            </button>
+          </div>
         </form>
       </div>
     ),
@@ -2619,22 +2787,40 @@ export default function App() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[540px] overflow-y-auto pr-1">
             {data.meals.map((meal) => {
               const m = getMealMacros(meal);
+              const isBeingEdited = editingMealId === meal.id;
               return (
-                <div key={meal.id} className={`${cInner} border rounded-xl p-3.5 space-y-2 flex flex-col justify-between`}>
+                <div
+                  key={meal.id}
+                  className={`${cInner} border ${
+                    isBeingEdited ? 'border-amber-400 ring-1 ring-amber-400/50' : ''
+                  } rounded-xl p-3.5 space-y-2 flex flex-col justify-between`}
+                >
                   <div>
                     <div className="flex items-start justify-between gap-2">
                       <h4 className={`font-semibold text-sm ${cTextPrimary}`}>{meal.name}</h4>
-                      <button
-                        onClick={() =>
-                          setData((prev) => ({
-                            ...prev,
-                            meals: prev.meals.filter((x) => x.id !== meal.id),
-                          }))
-                        }
-                        className={`p-1 ${cTextSecondary} hover:text-rose-400`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => startEditComposedMeal(meal)}
+                          title="Modifica ingredienti, grammature e nome del pasto"
+                          className={`p-1.5 rounded-lg border transition ${cCard} ${cTextSecondary} hover:text-amber-400 hover:border-amber-400/50`}
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (editingMealId === meal.id) cancelEditComposedMeal();
+                            setData((prev) => ({
+                              ...prev,
+                              meals: prev.meals.filter((x) => x.id !== meal.id),
+                            }));
+                          }}
+                          title="Elimina pasto"
+                          className={`p-1.5 ${cTextSecondary} hover:text-rose-400`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                     <div className={`text-xs ${cTextSecondary} space-y-0.5 mt-1.5`}>
                       {meal.items.map((it, i) => {
@@ -2643,8 +2829,8 @@ export default function App() {
                         const bg = extractBaseGrams(f);
                         return (
                           <div key={i}>
-                            • {it.qty}x {f.name}
-                            {bg && it.qty !== 1 ? ` (~${Math.round(it.qty * bg)}g)` : ''}
+                            • {Number(it.qty.toFixed(2))}x {f.name}
+                            {bg ? ` (${Math.round(it.qty * bg)}g)` : ''}
                           </div>
                         );
                       })}
@@ -2671,13 +2857,32 @@ export default function App() {
     addFoodForm: renderReorderWrapper(
       'foods',
       'addFoodForm',
-      'Aggiungi Alimento',
-      <div className={`${cCard} border rounded-2xl p-4 sm:p-5 h-fit`}>
-        <h3 className={`font-semibold text-base ${cEmerald} mb-1`}>Aggiungi Alimento al Database</h3>
+      editingFoodId ? 'Modifica Alimento' : 'Aggiungi Alimento',
+      <div className={`${cCard} border ${editingFoodId ? 'border-amber-400/60' : ''} rounded-2xl p-4 sm:p-5 h-fit`}>
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <h3 className={`font-semibold text-base ${editingFoodId ? cAmber : cEmerald} flex items-center gap-2`}>
+            {editingFoodId ? (
+              <>
+                <Edit3 className="w-4 h-4" /> Modifica Alimento Singolo
+              </>
+            ) : (
+              'Aggiungi Alimento al Database'
+            )}
+          </h3>
+          {editingFoodId && (
+            <button
+              type="button"
+              onClick={cancelEditFood}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1 ${cInner} ${cTextSecondary} hover:text-rose-400`}
+            >
+              <X className="w-3.5 h-3.5" /> Annulla
+            </button>
+          )}
+        </div>
         <p className={`text-xs ${cTextSecondary} mb-3`}>
-          Inserisci i valori nutrizionali per la porzione di riferimento (es. 100g): potrai poi scegliere i grammi o le porzioni esatte quando componi un pasto o li assegni alla giornata.
+          Inserisci o modifica i valori nutrizionali e la grammatura di riferimento (es. 100g): potrai poi regolare i grammi esatti sia nei pasti che negli slot giornalieri.
         </p>
-        <form onSubmit={handleAddFood} className="space-y-3">
+        <form onSubmit={handleSaveFood} className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 sm:gap-3">
             <div className="sm:col-span-8">
               <label className={`block text-xs ${cTextSecondary} mb-1`}>Nome Alimento</label>
@@ -2691,7 +2896,7 @@ export default function App() {
               />
             </div>
             <div className="sm:col-span-4">
-              <label className={`block text-xs ${cTextSecondary} mb-1`}>Porzione rif. (g)</label>
+              <label className={`block text-xs ${cTextSecondary} mb-1`}>Grammatura rif. (g)</label>
               <input
                 type="number"
                 min="0.1"
@@ -2767,12 +2972,27 @@ export default function App() {
               />
             </div>
           </div>
-          <button
-            type="submit"
-            className="w-full py-3 sm:py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm transition"
-          >
-            Salva Alimento
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            {editingFoodId && (
+              <button
+                type="button"
+                onClick={cancelEditFood}
+                className={`py-3 sm:py-2.5 px-4 rounded-xl border font-semibold text-sm transition ${cInner} ${cTextSecondary}`}
+              >
+                Annulla
+              </button>
+            )}
+            <button
+              type="submit"
+              className={`flex-1 py-3 sm:py-2.5 rounded-xl ${
+                editingFoodId
+                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                  : 'bg-emerald-500 hover:bg-emerald-400 text-white'
+              } font-bold text-sm transition`}
+            >
+              {editingFoodId ? 'Aggiorna Alimento' : 'Salva Alimento'}
+            </button>
+          </div>
         </form>
       </div>
     ),
@@ -2787,41 +3007,54 @@ export default function App() {
           <p className={`text-xs ${cTextSecondary} italic py-6 text-center`}>Nessun alimento salvato nel database.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[500px] overflow-y-auto pr-1">
-            {data.foods.map((food) => (
-              <div
-                key={food.id}
-                className={`${cInner} border rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-2`}
-              >
-                <div className="min-w-0">
-                  <div className={`font-medium text-sm truncate ${cTextPrimary}`}>{food.name}</div>
-                  <div className={`text-xs ${cTextSecondary} flex flex-wrap gap-2 mt-0.5`}>
-                    <span className={`${cEmerald} font-semibold`}>{food.kcal} kcal</span>
-                    <span>P: {food.p}g</span>
-                    <span>
-                      C: {food.c}g
-                      {Number(food.sugars) > 0 ? ` (zucch. ${food.sugars}g)` : ''}
-                    </span>
-                    <span>G: {food.g}g</span>
+            {data.foods.map((food) => {
+              const isBeingEdited = editingFoodId === food.id;
+              return (
+                <div
+                  key={food.id}
+                  className={`${cInner} border ${
+                    isBeingEdited ? 'border-amber-400 ring-1 ring-amber-400/50' : ''
+                  } rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-2`}
+                >
+                  <div className="min-w-0">
+                    <div className={`font-medium text-sm truncate ${cTextPrimary}`}>{food.name}</div>
+                    <div className={`text-xs ${cTextSecondary} flex flex-wrap gap-2 mt-0.5`}>
+                      <span className={`${cEmerald} font-semibold`}>{food.kcal} kcal</span>
+                      <span>P: {food.p}g</span>
+                      <span>
+                        C: {food.c}g
+                        {Number(food.sugars) > 0 ? ` (zucch. ${food.sugars}g)` : ''}
+                      </span>
+                      <span>G: {food.g}g</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => startEditFood(food)}
+                      title="Modifica alimento e grammatura di riferimento"
+                      className={`p-1.5 rounded-lg border transition ${cCard} ${cTextSecondary} hover:text-amber-400 hover:border-amber-400/50`}
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSelectFoodInComposer(food.id);
+                        setNutritionSubTab('composer');
+                      }}
+                      title="Scegli quantità e aggiungi a un pasto"
+                      className={`px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 ${cEmerald} text-xs font-semibold transition`}
+                    >
+                      + Usa
+                    </button>
+                    <button onClick={() => handleDeleteFood(food.id)} className={`p-1.5 ${cTextSecondary} hover:text-rose-400 rounded-lg`}>
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleSelectFoodInComposer(food.id);
-                      setNutritionSubTab('composer');
-                    }}
-                    title="Scegli quantità e aggiungi a un pasto"
-                    className={`px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 ${cEmerald} text-xs font-semibold transition`}
-                  >
-                    + Usa
-                  </button>
-                  <button onClick={() => handleDeleteFood(food.id)} className={`p-2 ${cTextSecondary} hover:text-rose-400 rounded-lg`}>
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
