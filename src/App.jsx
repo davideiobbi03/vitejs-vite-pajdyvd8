@@ -284,6 +284,23 @@ const INITIAL_LAYOUT = {
 
 const STORAGE_KEY = 'fittrack_pro_data_v1';
 
+// Helper per normalizzare una voce assegnata a uno slot del piano settimanale.
+// Supporta sia le stringhe legacy ('m1') sia gli oggetti { type: 'meal' | 'food', id, qty }
+function normalizeSlotEntry(entry) {
+  if (!entry) return null;
+  if (typeof entry === 'string') {
+    return { type: 'meal', id: entry, qty: 1 };
+  }
+  if (typeof entry === 'object' && entry.id) {
+    return {
+      type: entry.type === 'food' ? 'food' : 'meal',
+      id: entry.id,
+      qty: typeof entry.qty === 'number' && entry.qty > 0 ? entry.qty : 1,
+    };
+  }
+  return null;
+}
+
 // Helper per recuperare il tempo di pausa tra la serie `setIndex` e la `setIndex + 1`
 function getSetRestSeconds(exercise, setIndex) {
   const defaultRest = Math.max(0, Number(exercise?.rest) || 90);
@@ -831,19 +848,48 @@ export default function App() {
     );
   };
 
+  // Calcola i macro di una singola voce assegnata a uno slot (pasto assemblato o cibo singolo)
+  const getSlotItemMacros = (rawEntry) => {
+    const entry = normalizeSlotEntry(rawEntry);
+    if (!entry) return { kcal: 0, p: 0, c: 0, sugars: 0, g: 0 };
+
+    if (entry.type === 'food') {
+      const food = getFoodById(entry.id);
+      if (!food) return { kcal: 0, p: 0, c: 0, sugars: 0, g: 0 };
+      const q = entry.qty || 1;
+      return {
+        kcal: food.kcal * q,
+        p: food.p * q,
+        c: food.c * q,
+        sugars: (Number(food.sugars) || 0) * q,
+        g: food.g * q,
+      };
+    }
+
+    const meal = data.meals.find((m) => m.id === entry.id);
+    const mMacros = getMealMacros(meal);
+    const q = entry.qty || 1;
+    return {
+      kcal: mMacros.kcal * q,
+      p: mMacros.p * q,
+      c: mMacros.c * q,
+      sugars: mMacros.sugars * q,
+      g: mMacros.g * q,
+    };
+  };
+
   const getDayMacros = (dayKey) => {
     const plan = data.weeklyPlan[dayKey] || {};
     let totals = { kcal: 0, p: 0, c: 0, sugars: 0, g: 0 };
     MEAL_SLOTS.forEach((slot) => {
-      const mealIds = plan[slot] || [];
-      mealIds.forEach((mId) => {
-        const meal = data.meals.find((m) => m.id === mId);
-        const mMacros = getMealMacros(meal);
-        totals.kcal += mMacros.kcal;
-        totals.p += mMacros.p;
-        totals.c += mMacros.c;
-        totals.sugars += mMacros.sugars;
-        totals.g += mMacros.g;
+      const entries = plan[slot] || [];
+      entries.forEach((rawEntry) => {
+        const itemMacros = getSlotItemMacros(rawEntry);
+        totals.kcal += itemMacros.kcal;
+        totals.p += itemMacros.p;
+        totals.c += itemMacros.c;
+        totals.sugars += itemMacros.sugars;
+        totals.g += itemMacros.g;
       });
     });
     return {
@@ -971,8 +1017,19 @@ export default function App() {
     setNutritionSubTab('planner');
   };
 
-  const assignMealToSlot = (day, slot, mealId) => {
-    if (!mealId) return;
+  // Assegna un pasto assemblato ("meal:<id>") oppure un cibo singolo ("food:<id>") allo slot
+  const assignEntryToSlot = (day, slot, encodedValue) => {
+    if (!encodedValue) return;
+    const sepIdx = encodedValue.indexOf(':');
+    let entryObj;
+    if (sepIdx !== -1) {
+      const type = encodedValue.slice(0, sepIdx) === 'food' ? 'food' : 'meal';
+      const id = encodedValue.slice(sepIdx + 1);
+      entryObj = { type, id, qty: 1 };
+    } else {
+      entryObj = { type: 'meal', id: encodedValue, qty: 1 };
+    }
+
     setData((prev) => {
       const currentSlot = prev.weeklyPlan[day]?.[slot] || [];
       return {
@@ -981,7 +1038,34 @@ export default function App() {
           ...prev.weeklyPlan,
           [day]: {
             ...prev.weeklyPlan[day],
-            [slot]: [...currentSlot, mealId],
+            [slot]: [...currentSlot, entryObj],
+          },
+        },
+      };
+    });
+  };
+
+  // Aggiorna la quantità (moltiplicatore porzioni) di un cibo singolo o pasto nello slot
+  const updateSlotEntryQty = (day, slot, indexToUpdate, nextQtyRaw) => {
+    const parsed = parseFloat(String(nextQtyRaw).replace(',', '.'));
+    if (isNaN(parsed) || parsed <= 0) return;
+    const cleanQty = Number(parsed.toFixed(3));
+
+    setData((prev) => {
+      const currentSlot = prev.weeklyPlan[day]?.[slot] || [];
+      const updatedSlot = currentSlot.map((rawEntry, idx) => {
+        if (idx !== indexToUpdate) return rawEntry;
+        const norm = normalizeSlotEntry(rawEntry);
+        if (!norm) return rawEntry;
+        return { ...norm, qty: cleanQty };
+      });
+      return {
+        ...prev,
+        weeklyPlan: {
+          ...prev.weeklyPlan,
+          [day]: {
+            ...prev.weeklyPlan[day],
+            [slot]: updatedSlot,
           },
         },
       };
@@ -1148,11 +1232,9 @@ export default function App() {
         }
       }
       if (allDone) {
-        // Ultima serie completata: avvia la pausa specifica di transizione verso l'esercizio successivo
         const exRest = getExerciseTransitionRest(exercise, data.betweenExerciseRest || 180);
         startTimer(exRest, 'exercise', 'Verso es. succ.');
       } else {
-        // Serie intermedia completata: avvia la pausa specifica tra setIndex e setIndex + 1
         const transitionIdx = Math.min(setIndex, Math.max(0, exercise.sets - 2));
         const specificRest = getSetRestSeconds(exercise, transitionIdx);
         startTimer(specificRest, 'set', `S${transitionIdx + 1}→S${transitionIdx + 2}`);
@@ -2033,7 +2115,7 @@ export default function App() {
       'Slot Pasti Giornalieri',
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5 sm:gap-4">
         {MEAL_SLOTS.map((slot) => {
-          const assignedMealIds = data.weeklyPlan[selectedDay]?.[slot] || [];
+          const assignedEntries = data.weeklyPlan[selectedDay]?.[slot] || [];
           return (
             <div
               key={slot}
@@ -2043,27 +2125,124 @@ export default function App() {
                 <div className="flex items-center justify-between mb-3">
                   <h4 className={`font-semibold text-sm sm:text-base ${cTextPrimary}`}>{slot}</h4>
                   <span className={`text-xs ${cTextSecondary}`}>
-                    {assignedMealIds.length} {assignedMealIds.length === 1 ? 'pasto' : 'pasti'}
+                    {assignedEntries.length} {assignedEntries.length === 1 ? 'voce' : 'voci'}
                   </span>
                 </div>
 
-                {assignedMealIds.length === 0 ? (
+                {assignedEntries.length === 0 ? (
                   <p className={`text-xs ${cTextSecondary} italic py-3 text-center border border-dashed ${isLight ? 'border-slate-300' : 'border-slate-700'} rounded-xl`}>
-                    Nessun pasto assegnato a {slot.toLowerCase()}
+                    Nessun pasto o cibo assegnato a {slot.toLowerCase()}
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {assignedMealIds.map((mId, idx) => {
-                      const meal = data.meals.find((m) => m.id === mId);
+                    {assignedEntries.map((rawEntry, idx) => {
+                      const entry = normalizeSlotEntry(rawEntry);
+                      if (!entry) return null;
+
+                      if (entry.type === 'food') {
+                        const food = getFoodById(entry.id);
+                        if (!food) return null;
+                        const q = entry.qty || 1;
+                        const baseGrams = extractBaseGrams(food);
+                        const macros = {
+                          kcal: food.kcal * q,
+                          p: food.p * q,
+                          c: food.c * q,
+                          sugars: (Number(food.sugars) || 0) * q,
+                          g: food.g * q,
+                        };
+
+                        return (
+                          <div
+                            key={`food-${entry.id}-${idx}`}
+                            className={`${cInner} border rounded-xl p-3 space-y-2`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-sky-500/20 ${cSky}`}>
+                                    Singolo
+                                  </span>
+                                  <span className={`font-medium text-sm ${cTextPrimary} leading-snug`}>
+                                    {food.name}
+                                  </span>
+                                </div>
+                                <div className={`text-[11px] ${cTextSecondary} mt-1 flex flex-wrap gap-2`}>
+                                  <span className={`${cEmerald} font-semibold`}>{Math.round(macros.kcal)} kcal</span>
+                                  <span>• P: {Math.round(macros.p)}g</span>
+                                  <span>
+                                    • C: {Math.round(macros.c)}g
+                                    {macros.sugars > 0 ? ` (zucch. ${Math.round(macros.sugars)}g)` : ''}
+                                  </span>
+                                  <span>• G: {Math.round(macros.g)}g</span>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => removeMealFromSlot(selectedDay, slot, idx)}
+                                className={`p-1.5 ${cTextSecondary} hover:text-rose-400 rounded-lg transition shrink-0`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {/* Regolazione rapida dose/grammi per cibo singolo */}
+                            <div className={`pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/70'} flex items-center justify-between gap-2 text-xs`}>
+                              <span className={`text-[11px] ${cTextSecondary}`}>
+                                Dose:{' '}
+                                <strong className={cTextPrimary}>
+                                  {q}x{baseGrams ? ` (~${Math.round(q * baseGrams)}g)` : ''}
+                                </strong>
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateSlotEntryQty(selectedDay, slot, idx, Math.max(0.25, Number((q - 0.25).toFixed(2))))
+                                  }
+                                  className={`w-6 h-6 rounded-md border font-bold flex items-center justify-center ${cCard} ${cTextPrimary}`}
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0.05"
+                                  value={q}
+                                  onChange={(e) => updateSlotEntryQty(selectedDay, slot, idx, e.target.value)}
+                                  className={`w-12 ${cInput} border rounded-md px-1 py-0.5 text-center font-bold text-xs`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateSlotEntryQty(selectedDay, slot, idx, Number((q + 0.25).toFixed(2)))
+                                  }
+                                  className={`w-6 h-6 rounded-md border font-bold flex items-center justify-center ${cCard} ${cTextPrimary}`}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const meal = data.meals.find((m) => m.id === entry.id);
                       if (!meal) return null;
                       const macros = getMealMacros(meal);
                       return (
                         <div
-                          key={`${mId}-${idx}`}
+                          key={`meal-${entry.id}-${idx}`}
                           className={`${cInner} border rounded-xl p-3 flex items-start justify-between gap-2`}
                         >
-                          <div>
-                            <div className={`font-medium text-sm ${cTextPrimary}`}>{meal.name}</div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 ${cEmerald}`}>
+                                Pasto
+                              </span>
+                              <span className={`font-medium text-sm ${cTextPrimary} leading-snug`}>
+                                {meal.name}
+                              </span>
+                            </div>
                             <div className={`text-[11px] ${cTextSecondary} mt-1 flex flex-wrap gap-2`}>
                               <span className={`${cEmerald} font-semibold`}>{Math.round(macros.kcal)} kcal</span>
                               <span>• P: {Math.round(macros.p)}g</span>
@@ -2076,7 +2255,7 @@ export default function App() {
                           </div>
                           <button
                             onClick={() => removeMealFromSlot(selectedDay, slot, idx)}
-                            className={`p-2 ${cTextSecondary} hover:text-rose-400 rounded-lg transition`}
+                            className={`p-1.5 ${cTextSecondary} hover:text-rose-400 rounded-lg transition shrink-0`}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -2092,23 +2271,36 @@ export default function App() {
                   defaultValue=""
                   onChange={(e) => {
                     if (e.target.value) {
-                      assignMealToSlot(selectedDay, slot, e.target.value);
+                      assignEntryToSlot(selectedDay, slot, e.target.value);
                       e.target.value = '';
                     }
                   }}
                   className={`flex-1 ${cInput} border rounded-xl px-3 py-2.5 sm:py-2 text-xs focus:outline-none focus:border-emerald-400`}
                 >
                   <option value="" disabled className={cOption}>
-                    + Assegna un pasto composto...
+                    + Aggiungi pasto o cibo singolo...
                   </option>
-                  {data.meals.map((m) => {
-                    const mm = getMealMacros(m);
-                    return (
-                      <option key={m.id} value={m.id} className={cOption}>
-                        {m.name} ({Math.round(mm.kcal)} kcal • {Math.round(mm.p)}g P)
-                      </option>
-                    );
-                  })}
+                  {data.meals.length > 0 && (
+                    <optgroup label="── Pasti Assemblati ──" className={cOption}>
+                      {data.meals.map((m) => {
+                        const mm = getMealMacros(m);
+                        return (
+                          <option key={`meal:${m.id}`} value={`meal:${m.id}`} className={cOption}>
+                            {m.name} ({Math.round(mm.kcal)} kcal • {Math.round(mm.p)}g P)
+                          </option>
+                        );
+                      })}
+                    </optgroup>
+                  )}
+                  {data.foods.length > 0 && (
+                    <optgroup label="── Cibi Singoli ──" className={cOption}>
+                      {data.foods.map((f) => (
+                        <option key={`food:${f.id}`} value={`food:${f.id}`} className={cOption}>
+                          {f.name} ({Math.round(f.kcal)} kcal • {Math.round(f.p)}g P)
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
             </div>
@@ -2483,7 +2675,7 @@ export default function App() {
       <div className={`${cCard} border rounded-2xl p-4 sm:p-5 h-fit`}>
         <h3 className={`font-semibold text-base ${cEmerald} mb-1`}>Aggiungi Alimento al Database</h3>
         <p className={`text-xs ${cTextSecondary} mb-3`}>
-          Inserisci i valori nutrizionali per la porzione di riferimento (es. 100g): potrai poi scegliere i grammi o le porzioni esatte quando componi un pasto.
+          Inserisci i valori nutrizionali per la porzione di riferimento (es. 100g): potrai poi scegliere i grammi o le porzioni esatte quando componi un pasto o li assegni alla giornata.
         </p>
         <form onSubmit={handleAddFood} className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 sm:gap-3">
