@@ -32,8 +32,6 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
-  Palette,
-  Image as ImageIcon,
   Eraser,
   SkipForward,
   Check,
@@ -78,53 +76,6 @@ const DRINK_TYPES = [
   { id: 'tea', label: 'Tè / Tisana non zuccherata', factor: 1 },
   { id: 'coffee', label: 'Caffè / Espresso', factor: 0.8 },
 ];
-
-const PRESET_BACKGROUNDS = [
-  {
-    id: 'aurora-emerald',
-    name: 'Aurora Smeraldo',
-    css: 'radial-gradient(circle at 15% 15%, rgba(16, 185, 129, 0.25), transparent 45%), radial-gradient(circle at 85% 80%, rgba(99, 102, 241, 0.22), transparent 50%), linear-gradient(135deg, #020617 0%, #0f172a 100%)',
-    preview: 'linear-gradient(135deg, #064e3b, #0f172a, #312e81)',
-  },
-  {
-    id: 'deep-abyss',
-    name: 'Notte Profonda',
-    css: 'radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.18), transparent 55%), linear-gradient(180deg, #030712 0%, #090d16 100%)',
-    preview: 'linear-gradient(180deg, #0c4a6e, #030712)',
-  },
-  {
-    id: 'sunset-power',
-    name: 'Tramonto Energia',
-    css: 'radial-gradient(circle at 80% 10%, rgba(244, 63, 94, 0.22), transparent 45%), radial-gradient(circle at 15% 85%, rgba(245, 158, 11, 0.18), transparent 50%), linear-gradient(135deg, #090d16 0%, #1e1b2e 100%)',
-    preview: 'linear-gradient(135deg, #881337, #1e1b2e, #78350f)',
-  },
-  {
-    id: 'steel-cobalt',
-    name: 'Acciaio & Cobalto',
-    css: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
-    preview: 'linear-gradient(135deg, #0f172a, #334155)',
-  },
-  {
-    id: 'sand-light',
-    name: 'Sabbia & Luce',
-    css: 'radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.12), transparent 50%), linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
-    preview: 'linear-gradient(135deg, #f8fafc, #cbd5e1)',
-  },
-  {
-    id: 'nordic-mist',
-    name: 'Nebbia Nordica',
-    css: 'radial-gradient(circle at 85% 15%, rgba(99, 102, 241, 0.14), transparent 50%), linear-gradient(135deg, #eef2ff 0%, #f1f5f9 100%)',
-    preview: 'linear-gradient(135deg, #e0e7ff, #f1f5f9)',
-  },
-];
-
-const INITIAL_BACKGROUND = {
-  type: 'default',
-  presetId: 'aurora-emerald',
-  color: '#0b132b',
-  imageUrl: '',
-  overlayOpacity: 0.55,
-};
 
 const EMPTY_WEEKLY_PLAN = {
   Lun: { Colazione: [], Pranzo: [], Cena: [], Spuntini: [] },
@@ -284,8 +235,6 @@ const INITIAL_LAYOUT = {
 
 const STORAGE_KEY = 'fittrack_pro_data_v1';
 
-// Helper per normalizzare una voce assegnata a uno slot del piano settimanale.
-// Supporta sia le stringhe legacy ('m1') sia gli oggetti { type: 'meal' | 'food', id, qty }
 function normalizeSlotEntry(entry) {
   if (!entry) return null;
   if (typeof entry === 'string') {
@@ -301,7 +250,6 @@ function normalizeSlotEntry(entry) {
   return null;
 }
 
-// Helper per recuperare il tempo di pausa tra la serie `setIndex` e la `setIndex + 1`
 function getSetRestSeconds(exercise, setIndex) {
   const defaultRest = Math.max(0, Number(exercise?.rest) || 90);
   if (Array.isArray(exercise?.setRests) && typeof exercise.setRests[setIndex] === 'number') {
@@ -310,7 +258,6 @@ function getSetRestSeconds(exercise, setIndex) {
   return defaultRest;
 }
 
-// Helper per recuperare la pausa specifica verso l'esercizio successivo
 function getExerciseTransitionRest(exercise, fallbackGlobalRest = 180) {
   if (typeof exercise?.restAfterExercise === 'number' && !isNaN(exercise.restAfterExercise)) {
     return Math.max(0, exercise.restAfterExercise);
@@ -318,7 +265,6 @@ function getExerciseTransitionRest(exercise, fallbackGlobalRest = 180) {
   return Math.max(0, Number(fallbackGlobalRest) || 180);
 }
 
-// Verifica se l'esercizio ha pause tra serie differenziate (es. S1->S2 120s, S2->S3 90s)
 function hasCustomPerSetRests(exercise) {
   if (!exercise || exercise.sets <= 1 || !Array.isArray(exercise.setRests)) return false;
   const transitions = exercise.sets - 1;
@@ -440,7 +386,6 @@ function normalizeWorkouts(rawWorkouts, defaultBetweenRest = 180) {
 function normalizeData(raw) {
   const safe = raw && typeof raw === 'object' ? raw : {};
   const layout = safe.layout && typeof safe.layout === 'object' ? safe.layout : {};
-  const bg = safe.background && typeof safe.background === 'object' ? safe.background : {};
   const ws = safe.waterSettings && typeof safe.waterSettings === 'object' ? safe.waterSettings : {};
   const bp = safe.bodyProfile && typeof safe.bodyProfile === 'object' ? safe.bodyProfile : {};
   const globalBetweenRest = typeof safe.betweenExerciseRest === 'number' ? safe.betweenExerciseRest : 180;
@@ -470,13 +415,6 @@ function normalizeData(raw) {
     targets: safe.targets && typeof safe.targets === 'object' ? { ...INITIAL_TARGETS, ...safe.targets } : INITIAL_TARGETS,
     theme: safe.theme === 'light' ? 'light' : 'dark',
     betweenExerciseRest: globalBetweenRest,
-    background: {
-      type: ['default', 'preset', 'color', 'image'].includes(bg.type) ? bg.type : INITIAL_BACKGROUND.type,
-      presetId: typeof bg.presetId === 'string' ? bg.presetId : INITIAL_BACKGROUND.presetId,
-      color: typeof bg.color === 'string' ? bg.color : INITIAL_BACKGROUND.color,
-      imageUrl: typeof bg.imageUrl === 'string' ? bg.imageUrl : INITIAL_BACKGROUND.imageUrl,
-      overlayOpacity: typeof bg.overlayOpacity === 'number' ? bg.overlayOpacity : INITIAL_BACKGROUND.overlayOpacity,
-    },
     layout: {
       nutrition: Array.isArray(layout.nutrition) ? layout.nutrition : INITIAL_LAYOUT.nutrition,
       planner: Array.isArray(layout.planner) ? layout.planner : INITIAL_LAYOUT.planner,
@@ -521,9 +459,6 @@ export default function App() {
 
   const isLight = data.theme === 'light';
   const [reorderMode, setReorderMode] = useState(false);
-  const [bgModalOpen, setBgModalOpen] = useState(false);
-  const [customImageInput, setCustomImageInput] = useState('');
-  const bgFileInputRef = useRef(null);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -564,48 +499,6 @@ export default function App() {
       ...prev,
       theme: prev.theme === 'light' ? 'dark' : 'light',
     }));
-  };
-
-  const updateBackground = (patch) => {
-    setData((prev) => ({
-      ...prev,
-      background: {
-        ...prev.background,
-        ...patch,
-      },
-    }));
-  };
-
-  const handleBackgroundImageUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxDim = 1440;
-        let w = img.width;
-        let h = img.height;
-        if (w > maxDim || h > maxDim) {
-          if (w > h) {
-            h = Math.round((h * maxDim) / w);
-            w = maxDim;
-          } else {
-            w = Math.round((w * maxDim) / h);
-            h = maxDim;
-          }
-        }
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.72);
-        updateBackground({ type: 'image', imageUrl: compressedDataUrl });
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
   };
 
   const moveSection = (groupKey, sectionId, direction) => {
@@ -716,7 +609,10 @@ export default function App() {
   }, [data]);
 
   const [activeTab, setActiveTab] = useState('nutrition');
+  // Sotto-schede unificate: 'planner' | 'pantry' | 'water' | 'weight'
   const [nutritionSubTab, setNutritionSubTab] = useState('planner');
+  // Vista attiva dentro la sezione unificata "Pasti & Alimenti": 'composer' | 'foods'
+  const [pantryView, setPantryView] = useState('composer');
 
   const [todayIso, setTodayIso] = useState(() => getTodayIso());
   const todayIsoRef = useRef(todayIso);
@@ -848,7 +744,6 @@ export default function App() {
     );
   };
 
-  // Calcola i macro di una singola voce assegnata a uno slot (pasto assemblato o cibo singolo)
   const getSlotItemMacros = (rawEntry) => {
     const entry = normalizeSlotEntry(rawEntry);
     if (!entry) return { kcal: 0, p: 0, c: 0, sugars: 0, g: 0 };
@@ -947,7 +842,6 @@ export default function App() {
     }
   };
 
-  // Avvia la modifica di un alimento singolo esistente
   const startEditFood = (food) => {
     const cleanName = String(food.name || '').replace(/\s*\(\d+(?:[.,]\d+)?\s*(?:g|gr|ml)\)\s*$/i, '').trim();
     const bg = extractBaseGrams(food);
@@ -961,6 +855,8 @@ export default function App() {
       sugars: String(food.sugars ?? ''),
       g: String(food.g ?? ''),
     });
+    setNutritionSubTab('pantry');
+    setPantryView('foods');
   };
 
   const cancelEditFood = () => {
@@ -1054,12 +950,12 @@ export default function App() {
     );
   };
 
-  // Carica un pasto assemblato nel compositore per modificarlo
   const startEditComposedMeal = (meal) => {
     setEditingMealId(meal.id);
     setMealName(meal.name);
     setMealItems(meal.items.map((it) => ({ foodId: it.foodId, qty: it.qty })));
-    setNutritionSubTab('composer');
+    setNutritionSubTab('pantry');
+    setPantryView('composer');
   };
 
   const cancelEditComposedMeal = () => {
@@ -1095,7 +991,6 @@ export default function App() {
     }
   };
 
-  // Assegna un pasto assemblato ("meal:<id>") oppure un cibo singolo ("food:<id>") allo slot
   const assignEntryToSlot = (day, slot, encodedValue) => {
     if (!encodedValue) return;
     const sepIdx = encodedValue.indexOf(':');
@@ -1123,7 +1018,6 @@ export default function App() {
     });
   };
 
-  // Aggiorna la quantità (moltiplicatore porzioni) di un cibo singolo o pasto nello slot
   const updateSlotEntryQty = (day, slot, indexToUpdate, nextQtyRaw) => {
     const parsed = parseFloat(String(nextQtyRaw).replace(',', '.'));
     if (isNaN(parsed) || parsed <= 0) return;
@@ -1150,7 +1044,6 @@ export default function App() {
     });
   };
 
-  // Aggiorna i grammi diretti di un cibo singolo nello slot
   const updateSlotEntryGrams = (day, slot, indexToUpdate, nextGramsRaw, baseGrams) => {
     if (!baseGrams || baseGrams <= 0) return;
     const parsedGrams = parseFloat(String(nextGramsRaw).replace(',', '.'));
@@ -1222,7 +1115,6 @@ export default function App() {
     }));
   };
 
-  // --- FUNZIONI TRACKER IDRATAZIONE ---
   const handleAddWater = (rawMl, containerLabel = 'Aggiunta rapida') => {
     const ml = Math.round(Number(rawMl));
     if (isNaN(ml) || ml <= 0) return;
@@ -1286,7 +1178,6 @@ export default function App() {
     setSelectedWaterDate(getLocalIsoDate(shifted));
   };
 
-  // --- GESTIONE AVANZATA PAUSE SERIE & ESERCIZI ---
   const toggleSetCompleted = (exercise, setIndex) => {
     const key = `${exercise.id}-${setIndex}`;
     const nextState = !completedSets[key];
@@ -1531,21 +1422,23 @@ export default function App() {
         ...prev,
         weeklyPlan: JSON.parse(JSON.stringify(EMPTY_WEEKLY_PLAN)),
       }));
-    } else if (nutritionSubTab === 'composer') {
-      if (!window.confirm('Vuoi eliminare tutti i pasti composti salvati (portandoli a 0)?')) return;
-      setData((prev) => ({
-        ...prev,
-        meals: [],
-        weeklyPlan: JSON.parse(JSON.stringify(EMPTY_WEEKLY_PLAN)),
-      }));
-      cancelEditComposedMeal();
-    } else if (nutritionSubTab === 'foods') {
-      if (!window.confirm('Vuoi azzerare a 0 tutto il database alimenti?')) return;
-      setData((prev) => ({
-        ...prev,
-        foods: [],
-      }));
-      cancelEditFood();
+    } else if (nutritionSubTab === 'pantry') {
+      if (pantryView === 'composer') {
+        if (!window.confirm('Vuoi eliminare tutti i pasti composti salvati (portandoli a 0)?')) return;
+        setData((prev) => ({
+          ...prev,
+          meals: [],
+          weeklyPlan: JSON.parse(JSON.stringify(EMPTY_WEEKLY_PLAN)),
+        }));
+        cancelEditComposedMeal();
+      } else {
+        if (!window.confirm('Vuoi azzerare a 0 tutto il database alimenti?')) return;
+        setData((prev) => ({
+          ...prev,
+          foods: [],
+        }));
+        cancelEditFood();
+      }
     } else if (nutritionSubTab === 'water') {
       if (!window.confirm(`Vuoi azzerare a 0 tutte le bevute registrate per il ${selectedWaterDate}?`)) return;
       setData((prev) => ({
@@ -1622,7 +1515,6 @@ export default function App() {
         workouts: INITIAL_WORKOUTS,
         targets: INITIAL_TARGETS,
         theme: prev.theme,
-        background: prev.background,
         layout: INITIAL_LAYOUT,
         betweenExerciseRest: 180,
       })
@@ -1743,44 +1635,12 @@ export default function App() {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const getWrapperBackgroundStyle = () => {
-    const bg = data.background || INITIAL_BACKGROUND;
-    if (bg.type === 'preset') {
-      const found = PRESET_BACKGROUNDS.find((p) => p.id === bg.presetId) || PRESET_BACKGROUNDS[0];
-      return { background: found.css, backgroundAttachment: 'fixed' };
-    }
-    if (bg.type === 'color') {
-      return { backgroundColor: bg.color || '#0b132b' };
-    }
-    if (bg.type === 'image' && bg.imageUrl) {
-      const op = typeof bg.overlayOpacity === 'number' ? bg.overlayOpacity : 0.55;
-      const overlayColor = isLight ? `rgba(248, 250, 252, ${op})` : `rgba(2, 6, 23, ${op})`;
-      return {
-        backgroundImage: `linear-gradient(${overlayColor}, ${overlayColor}), url("${bg.imageUrl}")`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundAttachment: 'fixed',
-      };
-    }
-    return {};
-  };
-
-  const hasCustomBg = data.background?.type && data.background.type !== 'default';
-
   const cCard = isLight
-    ? hasCustomBg
-      ? 'bg-white/92 backdrop-blur-md border-slate-200/90 shadow-sm'
-      : 'bg-white border-slate-200 shadow-sm'
-    : hasCustomBg
-    ? 'bg-slate-900/92 backdrop-blur-md border-slate-700/85 shadow-xl shadow-black/40'
+    ? 'bg-white border-slate-200 shadow-sm'
     : 'bg-slate-900/95 border-slate-800 shadow-xl shadow-black/30';
 
   const cInner = isLight
-    ? hasCustomBg
-      ? 'bg-slate-50/90 border-slate-200/90'
-      : 'bg-slate-50 border-slate-200'
-    : hasCustomBg
-    ? 'bg-slate-800/85 border-slate-700/80'
+    ? 'bg-slate-50 border-slate-200'
     : 'bg-slate-800/75 border-slate-700/75';
 
   const cInput = isLight
@@ -2274,7 +2134,6 @@ export default function App() {
                               </button>
                             </div>
 
-                            {/* Regolazione rapida grammi e porzioni per cibo singolo */}
                             <div className={`pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/70'} flex flex-wrap items-center justify-between gap-2 text-xs`}>
                               {baseGrams ? (
                                 <div className="flex items-center gap-1">
@@ -3041,7 +2900,8 @@ export default function App() {
                       type="button"
                       onClick={() => {
                         handleSelectFoodInComposer(food.id);
-                        setNutritionSubTab('composer');
+                        setNutritionSubTab('pantry');
+                        setPantryView('composer');
                       }}
                       title="Scegli quantità e aggiungi a un pasto"
                       className={`px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 ${cEmerald} text-xs font-semibold transition`}
@@ -3866,7 +3726,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* PANNELLO CONFIGURAZIONE TEMPI DI PAUSA IN MODALITÀ MODIFICA */}
                 {workoutMode === 'edit' && (
                   <div className={`${cInner} border border-indigo-400/35 rounded-xl p-3.5 space-y-3`}>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -3949,7 +3808,6 @@ export default function App() {
                   </div>
                 )}
 
-                {/* MODALITÀ WORKOUT LIVE */}
                 {workoutMode === 'live' && (
                   <div className="space-y-2 pt-1">
                     <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
@@ -4134,12 +3992,11 @@ export default function App() {
   return (
     <div
       style={{
-        ...getWrapperBackgroundStyle(),
         colorScheme: isLight ? 'light' : 'dark',
       }}
       className={`min-h-[100dvh] w-full overflow-x-hidden font-sans selection:bg-emerald-500/30 pb-44 sm:pb-32 transition-colors duration-200 ${
-        !hasCustomBg ? (isLight ? 'bg-slate-100' : 'bg-slate-950') : ''
-      } ${isLight ? 'text-slate-900' : 'text-white'}`}
+        isLight ? 'bg-slate-100 text-slate-900' : 'bg-slate-950 text-white'
+      }`}
     >
       {/* HEADER FULL-WIDTH */}
       <header
@@ -4178,28 +4035,6 @@ export default function App() {
             >
               {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
               <span className="hidden lg:inline">{isFullscreen ? 'Riduci' : 'Schermo intero'}</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setCustomImageInput(
-                  data.background?.type === 'image' && data.background.imageUrl.startsWith('http')
-                    ? data.background.imageUrl
-                    : ''
-                );
-                setBgModalOpen((v) => !v);
-              }}
-              title="Personalizza sfondo"
-              className={`flex items-center justify-center gap-1.5 text-xs p-2 sm:px-2.5 sm:py-1.5 rounded-lg border transition ${
-                bgModalOpen || hasCustomBg
-                  ? `bg-indigo-500/20 border-indigo-400/50 ${cIndigo} font-semibold`
-                  : isLight
-                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
-                  : 'bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-200'
-              }`}
-            >
-              <Palette className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Sfondo</span>
             </button>
 
             <button
@@ -4330,168 +4165,6 @@ export default function App() {
         </nav>
       </header>
 
-      {/* PANNELLO PERSONALIZZAZIONE SFONDO */}
-      {bgModalOpen && (
-        <div className="w-full px-3 sm:px-6 lg:px-8 pt-4">
-          <div className={`${cCard} border border-indigo-400/50 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Palette className={`w-4 h-4 ${cIndigo}`} />
-                <h3 className={`font-semibold text-sm ${cTextPrimary}`}>Personalizza Sfondo dell&apos;App</h3>
-              </div>
-              <button onClick={() => setBgModalOpen(false)} className={`p-1 ${cTextSecondary} hover:text-rose-400`}>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              <div className={`text-xs font-semibold ${cTextSecondary}`}>Sfondi Sfumati &amp; Predefinito</div>
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2">
-                <button
-                  type="button"
-                  onClick={() => updateBackground({ type: 'default' })}
-                  className={`p-2 rounded-xl border text-left transition flex flex-col gap-1.5 ${
-                    data.background.type === 'default'
-                      ? 'border-indigo-400 ring-2 ring-indigo-400/30'
-                      : `${cInner} border`
-                  }`}
-                >
-                  <div
-                    className={`w-full h-8 rounded-lg border ${
-                      isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-950 border-slate-700'
-                    }`}
-                  />
-                  <span className={`text-[11px] font-medium truncate ${cTextPrimary}`}>Default</span>
-                </button>
-
-                {PRESET_BACKGROUNDS.map((preset) => {
-                  const selected = data.background.type === 'preset' && data.background.presetId === preset.id;
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => updateBackground({ type: 'preset', presetId: preset.id })}
-                      className={`p-2 rounded-xl border text-left transition flex flex-col gap-1.5 ${
-                        selected
-                          ? 'border-indigo-400 ring-2 ring-indigo-400/30'
-                          : `${cInner} border`
-                      }`}
-                    >
-                      <div
-                        className="w-full h-8 rounded-lg border border-white/15"
-                        style={{ background: preset.preview }}
-                      />
-                      <span className={`text-[11px] font-medium truncate ${cTextPrimary}`}>{preset.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className={`grid grid-cols-1 md:grid-cols-12 gap-4 pt-3 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/80'}`}>
-              <div className="md:col-span-4 space-y-2">
-                <div className={`text-xs font-semibold ${cTextSecondary}`}>Colore Tinta Unita</div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={data.background.color || '#0b132b'}
-                    onChange={(e) => updateBackground({ type: 'color', color: e.target.value })}
-                    className="w-10 h-10 rounded-xl cursor-pointer border-0 bg-transparent"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => updateBackground({ type: 'color' })}
-                    className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold border transition ${
-                      data.background.type === 'color'
-                        ? 'bg-indigo-600 border-indigo-400 text-white'
-                        : `${cInner} ${cTextPrimary}`
-                    }`}
-                  >
-                    Applica Colore
-                  </button>
-                </div>
-              </div>
-
-              <div className="md:col-span-8 space-y-2">
-                <div className={`text-xs font-semibold ${cTextSecondary}`}>Foto o Immagine Personalizzata</div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <button
-                    type="button"
-                    onClick={() => bgFileInputRef.current?.click()}
-                    className={`px-3 py-2.5 rounded-xl text-xs font-semibold border flex items-center justify-center gap-1.5 whitespace-nowrap transition ${cInner} ${cTextPrimary} hover:border-indigo-400`}
-                  >
-                    <ImageIcon className={`w-3.5 h-3.5 ${cIndigo}`} />
-                    Carica Foto
-                  </button>
-                  <input
-                    ref={bgFileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleBackgroundImageUpload}
-                    className="hidden"
-                  />
-
-                  <div className="flex flex-1 gap-2">
-                    <input
-                      type="url"
-                      placeholder="URL immagine (https://...)"
-                      value={customImageInput}
-                      onChange={(e) => setCustomImageInput(e.target.value)}
-                      className={`flex-1 ${cInput} border rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-400`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (customImageInput.trim()) {
-                          updateBackground({ type: 'image', imageUrl: customImageInput.trim() });
-                        }
-                      }}
-                      className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shrink-0"
-                    >
-                      Usa URL
-                    </button>
-                  </div>
-                </div>
-
-                {data.background.type === 'image' && data.background.imageUrl && (
-                  <div className="flex items-center gap-3 pt-1">
-                    <span className={`text-[11px] ${cTextSecondary} whitespace-nowrap`}>
-                      Contrasto ({Math.round((data.background.overlayOpacity ?? 0.55) * 100)}%):
-                    </span>
-                    <input
-                      type="range"
-                      min="0.1"
-                      max="0.9"
-                      step="0.05"
-                      value={data.background.overlayOpacity ?? 0.55}
-                      onChange={(e) => updateBackground({ overlayOpacity: parseFloat(e.target.value) })}
-                      className="flex-1 accent-indigo-400"
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className={`sm:hidden flex gap-2 pt-3 border-t ${isLight ? 'border-slate-200' : 'border-slate-700/80'}`}>
-              <button
-                type="button"
-                onClick={handleExportJSON}
-                className={`flex-1 py-2 rounded-xl text-xs font-semibold border flex items-center justify-center gap-1.5 ${cInner} ${cTextPrimary}`}
-              >
-                <Download className={`w-3.5 h-3.5 ${cEmerald}`} /> Esporta JSON
-              </button>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className={`flex-1 py-2 rounded-xl text-xs font-semibold border flex items-center justify-center gap-1.5 ${cInner} ${cTextPrimary}`}
-              >
-                <Upload className={`w-3.5 h-3.5 ${cIndigo}`} /> Importa JSON
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* BANNER INFORMATIVO MODALITÀ RIORDINO */}
       {reorderMode && (
         <div className="w-full px-3 sm:px-6 lg:px-8 pt-4">
@@ -4532,13 +4205,36 @@ export default function App() {
                   'Barra Sotto-Sezioni Alimentazione',
                   <div className="space-y-3">
                     <div className={`flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 ${cCard} border p-2 rounded-2xl`}>
-                      <div className="grid grid-cols-3 sm:flex sm:flex-wrap gap-1.5">
+                      <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5">
                         {[
-                          { id: 'planner', label: 'Piano', fullLabel: 'Piano Settimanale', icon: Calendar, activeBg: 'bg-emerald-500' },
-                          { id: 'composer', label: 'Componi', fullLabel: 'Componi Pasti', icon: Plus, activeBg: 'bg-emerald-500' },
-                          { id: 'foods', label: `Alimenti (${data.foods.length})`, fullLabel: `Alimenti (${data.foods.length})`, icon: Utensils, activeBg: 'bg-emerald-500' },
-                          { id: 'water', label: 'Acqua', fullLabel: 'Idratazione', icon: Droplets, activeBg: 'bg-sky-500' },
-                          { id: 'weight', label: 'Peso', fullLabel: 'Tracker Peso', icon: Scale, activeBg: 'bg-emerald-500' },
+                          {
+                            id: 'planner',
+                            label: 'Piano',
+                            fullLabel: 'Piano Settimanale',
+                            icon: Calendar,
+                            activeBg: 'bg-emerald-500',
+                          },
+                          {
+                            id: 'pantry',
+                            label: `Pasti & Alimenti (${data.meals.length + data.foods.length})`,
+                            fullLabel: `Pasti & Alimenti (${data.meals.length}P • ${data.foods.length}A)`,
+                            icon: Utensils,
+                            activeBg: 'bg-emerald-500',
+                          },
+                          {
+                            id: 'water',
+                            label: 'Acqua',
+                            fullLabel: 'Idratazione',
+                            icon: Droplets,
+                            activeBg: 'bg-sky-500',
+                          },
+                          {
+                            id: 'weight',
+                            label: 'Peso',
+                            fullLabel: 'Tracker Peso',
+                            icon: Scale,
+                            activeBg: 'bg-emerald-500',
+                          },
                         ].map((tab) => {
                           const Icon = tab.icon;
                           const isTabActive = nutritionSubTab === tab.id;
@@ -4794,15 +4490,77 @@ export default function App() {
                       </div>
                     )}
 
-                    {nutritionSubTab === 'composer' && (
+                    {/* SEZIONE UNIFICATA: PASTI & ALIMENTI CON SELETTORE / MENÙ A TENDINA */}
+                    {nutritionSubTab === 'pantry' && (
                       <div className="space-y-4 sm:space-y-5">
-                        {data.layout.composer.map((cId) => composerSections[cId] || null)}
-                      </div>
-                    )}
+                        <div className={`${cCard} border rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
+                          <div className="flex items-center gap-2.5">
+                            <div className="p-2 rounded-xl bg-emerald-500/20 border border-emerald-400/35 shrink-0">
+                              <Utensils className={`w-4 h-4 ${cEmerald}`} />
+                            </div>
+                            <div>
+                              <h3 className={`font-semibold text-sm sm:text-base ${cTextPrimary}`}>
+                                Gestione Pasti &amp; Database Alimenti
+                              </h3>
+                              <p className={`text-xs ${cTextSecondary}`}>
+                                Scegli se comporre ricette complete oppure gestire i singoli ingredienti
+                              </p>
+                            </div>
+                          </div>
 
-                    {nutritionSubTab === 'foods' && (
-                      <div className="space-y-4 sm:space-y-5">
-                        {data.layout.foods.map((fId) => foodsSections[fId] || null)}
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                            {/* Menù a tendina per passare velocemente tra Componi Pasti e Alimenti */}
+                            <select
+                              value={pantryView}
+                              onChange={(e) => setPantryView(e.target.value)}
+                              aria-label="Seleziona modalità Pasti o Alimenti"
+                              className={`${cInput} border rounded-xl px-3.5 py-2.5 sm:py-2 font-semibold text-xs sm:text-sm focus:outline-none focus:border-emerald-400 cursor-pointer`}
+                            >
+                              <option value="composer" className={cOption}>
+                                🍽️ Componi Pasti &amp; Ricettario ({data.meals.length})
+                              </option>
+                              <option value="foods" className={cOption}>
+                                🥗 Database Alimenti Singoli ({data.foods.length})
+                              </option>
+                            </select>
+
+                            {/* Toggle rapido a pulsanti per accesso immediato con 1 tap */}
+                            <div className={`grid grid-cols-2 p-1 rounded-xl border ${isLight ? 'bg-slate-100 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
+                              <button
+                                type="button"
+                                onClick={() => setPantryView('composer')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                                  pantryView === 'composer'
+                                    ? 'bg-emerald-500 text-white shadow-sm'
+                                    : cTextSecondary
+                                }`}
+                              >
+                                Pasti ({data.meals.length})
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPantryView('foods')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                                  pantryView === 'foods'
+                                    ? 'bg-emerald-500 text-white shadow-sm'
+                                    : cTextSecondary
+                                }`}
+                              >
+                                Alimenti ({data.foods.length})
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {pantryView === 'composer' ? (
+                          <div className="space-y-4 sm:space-y-5">
+                            {data.layout.composer.map((cId) => composerSections[cId] || null)}
+                          </div>
+                        ) : (
+                          <div className="space-y-4 sm:space-y-5">
+                            {data.layout.foods.map((fId) => foodsSections[fId] || null)}
+                          </div>
+                        )}
                       </div>
                     )}
 
