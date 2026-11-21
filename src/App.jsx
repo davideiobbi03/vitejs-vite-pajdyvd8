@@ -43,6 +43,8 @@ import {
   Minimize2,
   Calculator,
   PieChart,
+  Search,
+  LayoutDashboard,
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://qwxfjrunqhssoonapfcl.supabase.co';
@@ -224,7 +226,7 @@ const INITIAL_TARGETS = {
 };
 
 const INITIAL_LAYOUT = {
-  nutrition: ['subNav', 'mainContent'],
+  nutrition: ['todayDashboard', 'subNav', 'mainContent'],
   planner: ['summaryCard', 'mealSlotsGrid'],
   composer: ['composerForm', 'savedMealsList'],
   foods: ['addFoodForm', 'foodsList'],
@@ -390,6 +392,11 @@ function normalizeData(raw) {
   const bp = safe.bodyProfile && typeof safe.bodyProfile === 'object' ? safe.bodyProfile : {};
   const globalBetweenRest = typeof safe.betweenExerciseRest === 'number' ? safe.betweenExerciseRest : 180;
 
+  let nutritionLayout = Array.isArray(layout.nutrition) ? [...layout.nutrition] : [...INITIAL_LAYOUT.nutrition];
+  if (!nutritionLayout.includes('todayDashboard')) {
+    nutritionLayout = ['todayDashboard', ...nutritionLayout];
+  }
+
   return {
     foods: Array.isArray(safe.foods) ? safe.foods : INITIAL_FOODS,
     meals: Array.isArray(safe.meals) ? safe.meals : INITIAL_MEALS,
@@ -416,7 +423,7 @@ function normalizeData(raw) {
     theme: safe.theme === 'light' ? 'light' : 'dark',
     betweenExerciseRest: globalBetweenRest,
     layout: {
-      nutrition: Array.isArray(layout.nutrition) ? layout.nutrition : INITIAL_LAYOUT.nutrition,
+      nutrition: nutritionLayout,
       planner: Array.isArray(layout.planner) ? layout.planner : INITIAL_LAYOUT.planner,
       composer: Array.isArray(layout.composer) ? layout.composer : INITIAL_LAYOUT.composer,
       foods: Array.isArray(layout.foods) ? layout.foods : INITIAL_LAYOUT.foods,
@@ -613,6 +620,8 @@ export default function App() {
   const [nutritionSubTab, setNutritionSubTab] = useState('planner');
   // Vista attiva dentro la sezione unificata "Pasti & Alimenti": 'composer' | 'foods'
   const [pantryView, setPantryView] = useState('composer');
+  // Barra di ricerca istantanea per Pasti & Alimenti
+  const [pantrySearchQuery, setPantrySearchQuery] = useState('');
 
   const [todayIso, setTodayIso] = useState(() => getTodayIso());
   const todayIsoRef = useRef(todayIso);
@@ -1115,16 +1124,17 @@ export default function App() {
     }));
   };
 
-  const handleAddWater = (rawMl, containerLabel = 'Aggiunta rapida') => {
+  const handleAddWater = (rawMl, containerLabel = 'Aggiunta rapida', targetDateOverride = null) => {
     const ml = Math.round(Number(rawMl));
     if (isNaN(ml) || ml <= 0) return;
     const drinkObj = DRINK_TYPES.find((d) => d.id === selectedDrinkType) || DRINK_TYPES[0];
     const effectiveMl = Math.round(ml * drinkObj.factor);
     const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const logDate = targetDateOverride || selectedWaterDate;
 
     const entry = {
       id: 'wat-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-      date: selectedWaterDate,
+      date: logDate,
       time: nowTime,
       rawAmount: ml,
       amount: effectiveMl,
@@ -1558,6 +1568,16 @@ export default function App() {
       .reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
   };
 
+  // --- DATI REALI PER DASHBOARD "OGGI" ---
+  const realTodayDayKey = getTodayDayKey(new Date(`${todayIso}T12:00:00`));
+  const todayRealMacros = getDayMacros(realTodayDayKey);
+  const todayKcalDiff = data.targets.kcal - todayRealMacros.kcal;
+  const todayKcalPct = Math.min(100, Math.round((todayRealMacros.kcal / (data.targets.kcal || 1)) * 100));
+
+  const todayRealWaterTotal = getWaterTotalForDate(todayIso);
+  const todayRealWaterTarget = getWaterTargetForDate(todayIso);
+  const todayRealWaterPct = Math.min(100, Math.round((todayRealWaterTotal / (todayRealWaterTarget || 1)) * 100));
+
   const selectedDateWaterLogs = (data.waterLogs || []).filter((entry) => entry.date === selectedWaterDate);
   const selectedDateWaterTotal = selectedDateWaterLogs.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const selectedDateWaterTarget = getWaterTargetForDate(selectedWaterDate);
@@ -1634,6 +1654,23 @@ export default function App() {
     const s = sec % 60;
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
+
+  // --- FILTRI DI RICERCA IN "PASTI & ALIMENTI" ---
+  const normalizedSearch = pantrySearchQuery.trim().toLowerCase();
+
+  const filteredMeals = normalizedSearch
+    ? data.meals.filter((meal) => {
+        if (meal.name.toLowerCase().includes(normalizedSearch)) return true;
+        return meal.items.some((it) => {
+          const f = getFoodById(it.foodId);
+          return f && f.name.toLowerCase().includes(normalizedSearch);
+        });
+      })
+    : data.meals;
+
+  const filteredFoods = normalizedSearch
+    ? data.foods.filter((food) => food.name.toLowerCase().includes(normalizedSearch))
+    : data.foods;
 
   const cCard = isLight
     ? 'bg-white border-slate-200 shadow-sm'
@@ -2639,12 +2676,26 @@ export default function App() {
       'savedMealsList',
       'Pasti Già Pronti',
       <div className={`${cCard} border rounded-2xl p-4 sm:p-5 space-y-3`}>
-        <h3 className={`font-semibold text-base ${cTextPrimary}`}>Pasti Già Pronti ({data.meals.length})</h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className={`font-semibold text-base ${cTextPrimary}`}>
+            Pasti Già Pronti ({filteredMeals.length}
+            {normalizedSearch ? ` su ${data.meals.length}` : ''})
+          </h3>
+          {normalizedSearch && (
+            <span className={`text-xs font-medium ${cEmerald}`}>
+              Filtro: &ldquo;{pantrySearchQuery}&rdquo;
+            </span>
+          )}
+        </div>
         {data.meals.length === 0 ? (
           <p className={`text-xs ${cTextSecondary} italic py-6 text-center`}>Nessun pasto composto salvato.</p>
+        ) : filteredMeals.length === 0 ? (
+          <p className={`text-xs ${cTextSecondary} italic py-6 text-center`}>
+            Nessun pasto corrisponde alla ricerca &ldquo;{pantrySearchQuery}&rdquo;.
+          </p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[540px] overflow-y-auto pr-1">
-            {data.meals.map((meal) => {
+            {filteredMeals.map((meal) => {
               const m = getMealMacros(meal);
               const isBeingEdited = editingMealId === meal.id;
               return (
@@ -2861,12 +2912,26 @@ export default function App() {
       'foodsList',
       'Alimenti Salvati',
       <div className={`${cCard} border rounded-2xl p-4 sm:p-5`}>
-        <h3 className={`font-semibold text-base ${cTextPrimary} mb-3`}>Alimenti Salvati ({data.foods.length})</h3>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h3 className={`font-semibold text-base ${cTextPrimary}`}>
+            Alimenti Salvati ({filteredFoods.length}
+            {normalizedSearch ? ` su ${data.foods.length}` : ''})
+          </h3>
+          {normalizedSearch && (
+            <span className={`text-xs font-medium ${cEmerald}`}>
+              Filtro: &ldquo;{pantrySearchQuery}&rdquo;
+            </span>
+          )}
+        </div>
         {data.foods.length === 0 ? (
           <p className={`text-xs ${cTextSecondary} italic py-6 text-center`}>Nessun alimento salvato nel database.</p>
+        ) : filteredFoods.length === 0 ? (
+          <p className={`text-xs ${cTextSecondary} italic py-6 text-center`}>
+            Nessun alimento corrisponde alla ricerca &ldquo;{pantrySearchQuery}&rdquo;.
+          </p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[500px] overflow-y-auto pr-1">
-            {data.foods.map((food) => {
+            {filteredFoods.map((food) => {
               const isBeingEdited = editingFoodId === food.id;
               return (
                 <div
@@ -4198,6 +4263,209 @@ export default function App() {
         {activeTab === 'nutrition' && (
           <div className="space-y-4 sm:space-y-5">
             {data.layout.nutrition.map((secId) => {
+              if (secId === 'todayDashboard') {
+                return renderReorderWrapper(
+                  'nutrition',
+                  'todayDashboard',
+                  'Dashboard Riepilogativa Oggi',
+                  <div className={`${cCard} border rounded-2xl p-3.5 sm:p-4 space-y-3`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/35">
+                          <LayoutDashboard className={`w-4 h-4 ${cEmerald}`} />
+                        </div>
+                        <div>
+                          <h2 className={`font-bold text-sm sm:text-base ${cTextPrimary} leading-tight`}>
+                            Panoramica di Oggi — {FULL_DAYS[realTodayDayKey]}
+                          </h2>
+                          <p className={`text-[11px] ${cTextSecondary}`}>
+                            {todayIso} • Tocca un riquadro per aprire i dettagli
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleAddWater(250, 'Rabbocco rapido Oggi', todayIso)}
+                          title="Registra subito +250 ml d'acqua per oggi"
+                          className={`px-2.5 py-1.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/40 ${cSky} text-xs font-bold flex items-center gap-1 transition active:scale-95`}
+                        >
+                          <Droplet className="w-3.5 h-3.5 fill-current" />
+                          <span>+250ml</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('workout')}
+                          className={`px-2.5 py-1.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-400/40 ${cIndigo} text-xs font-bold flex items-center gap-1 transition`}
+                        >
+                          <Dumbbell className="w-3.5 h-3.5" />
+                          <span>Vai al Workout</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-3">
+                      {/* 1. MACRO DI OGGI */}
+                      <div
+                        onClick={() => {
+                          setSelectedDay(realTodayDayKey);
+                          setNutritionSubTab('planner');
+                        }}
+                        className={`${cInner} hover:border-emerald-400/60 border rounded-xl p-3 cursor-pointer transition flex flex-col justify-between space-y-2`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className={`text-xs font-semibold ${cTextSecondary} flex items-center gap-1.5`}>
+                            <Flame className={`w-3.5 h-3.5 ${cEmerald}`} />
+                            Calorie Oggi ({realTodayDayKey})
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                              todayKcalDiff >= 0
+                                ? `bg-emerald-500/20 ${cEmerald}`
+                                : `bg-amber-500/20 ${cAmber}`
+                            }`}
+                          >
+                            {todayKcalDiff >= 0 ? `-${todayKcalDiff} kcal` : `+${Math.abs(todayKcalDiff)} kcal`}
+                          </span>
+                        </div>
+
+                        <div>
+                          <div className={`text-base sm:text-lg font-extrabold ${cTextPrimary}`}>
+                            {todayRealMacros.kcal}{' '}
+                            <span className={`text-xs font-normal ${cTextSecondary}`}>/ {data.targets.kcal} kcal</span>
+                          </div>
+                          <div className={`text-[11px] ${cTextSecondary} mt-0.5 flex gap-2 font-medium`}>
+                            <span className={cSky}>{todayRealMacros.p}P</span>
+                            <span>•</span>
+                            <span className={cAmber}>{todayRealMacros.c}C</span>
+                            <span>•</span>
+                            <span className={cRose}>{todayRealMacros.g}G</span>
+                          </div>
+                        </div>
+
+                        <div className={`w-full h-1.5 rounded-full overflow-hidden ${isLight ? 'bg-slate-200' : 'bg-slate-950'}`}>
+                          <div
+                            className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                            style={{ width: `${todayKcalPct}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* 2. IDRATAZIONE DI OGGI */}
+                      <div
+                        onClick={() => {
+                          setSelectedWaterDate(todayIso);
+                          setNutritionSubTab('water');
+                        }}
+                        className={`${cInner} hover:border-sky-400/60 border rounded-xl p-3 cursor-pointer transition flex flex-col justify-between space-y-2`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className={`text-xs font-semibold ${cTextSecondary} flex items-center gap-1.5`}>
+                            <Droplets className={`w-3.5 h-3.5 ${cSky}`} />
+                            Idratazione Oggi
+                          </span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-500/20 ${cSky}`}>
+                            {todayRealWaterPct}%
+                          </span>
+                        </div>
+
+                        <div>
+                          <div className={`text-base sm:text-lg font-extrabold ${cTextPrimary}`}>
+                            {todayRealWaterTotal}{' '}
+                            <span className={`text-xs font-normal ${cTextSecondary}`}>/ {todayRealWaterTarget} ml</span>
+                          </div>
+                          <div className={`text-[11px] ${cTextSecondary} mt-0.5`}>
+                            {todayRealWaterTotal >= todayRealWaterTarget
+                              ? 'Obiettivo giornaliero raggiunto!'
+                              : `Mancano ${todayRealWaterTarget - todayRealWaterTotal} ml al target`}
+                          </div>
+                        </div>
+
+                        <div className={`w-full h-1.5 rounded-full overflow-hidden ${isLight ? 'bg-slate-200' : 'bg-slate-950'}`}>
+                          <div
+                            className="h-full bg-sky-400 rounded-full transition-all duration-300"
+                            style={{ width: `${todayRealWaterPct}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* 3. PESO ATTUALE */}
+                      <div
+                        onClick={() => setNutritionSubTab('weight')}
+                        className={`${cInner} hover:border-emerald-400/60 border rounded-xl p-3 cursor-pointer transition flex flex-col justify-between space-y-2`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className={`text-xs font-semibold ${cTextSecondary} flex items-center gap-1.5`}>
+                            <Scale className={`w-3.5 h-3.5 ${cEmerald}`} />
+                            Peso Corporeo
+                          </span>
+                          {weightDeltaLast !== null && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 ${cEmerald}`}>
+                              {Number(weightDeltaLast) > 0 ? `+${weightDeltaLast}` : weightDeltaLast} kg
+                            </span>
+                          )}
+                        </div>
+
+                        <div>
+                          <div className={`text-base sm:text-lg font-extrabold ${cTextPrimary}`}>
+                            {latestWeight ? `${latestWeight.weight} kg` : '—'}
+                          </div>
+                          <div className={`text-[11px] ${cTextSecondary} mt-0.5 truncate`}>
+                            {latestWeight
+                              ? `Ultima pesata: ${latestWeight.date}`
+                              : 'Nessuna pesata registrata'}
+                          </div>
+                        </div>
+
+                        <div className={`text-[10px] font-semibold ${cEmerald} flex items-center gap-1`}>
+                          <span>Apri grafico &amp; registra peso</span>
+                          <ChevronRight className="w-3 h-3" />
+                        </div>
+                      </div>
+
+                      {/* 4. STATO WORKOUT */}
+                      <div
+                        onClick={() => setActiveTab('workout')}
+                        className={`${cInner} hover:border-indigo-400/60 border rounded-xl p-3 cursor-pointer transition flex flex-col justify-between space-y-2`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className={`text-xs font-semibold ${cTextSecondary} flex items-center gap-1.5`}>
+                            <Dumbbell className={`w-3.5 h-3.5 ${cIndigo}`} />
+                            Scheda Attiva
+                          </span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 ${cIndigo}`}>
+                            {completedSetsInWorkout}/{totalSetsInWorkout} serie
+                          </span>
+                        </div>
+
+                        <div>
+                          <div className={`text-sm sm:text-base font-extrabold ${cTextPrimary} truncate`}>
+                            {currentWorkout ? `${currentWorkout.dayLabel}: ${currentWorkout.title}` : 'Workout'}
+                          </div>
+                          <div className={`text-[11px] ${cTextSecondary} mt-0.5 truncate`}>
+                            {currentWorkout?.focus || 'Pronto per iniziare'}
+                          </div>
+                        </div>
+
+                        <div className={`w-full h-1.5 rounded-full overflow-hidden ${isLight ? 'bg-slate-200' : 'bg-slate-950'}`}>
+                          <div
+                            className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                            style={{
+                              width: `${
+                                totalSetsInWorkout > 0
+                                  ? Math.min(100, Math.round((completedSetsInWorkout / totalSetsInWorkout) * 100))
+                                  : 0
+                              }%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
               if (secId === 'subNav') {
                 return renderReorderWrapper(
                   'nutrition',
@@ -4490,65 +4758,91 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* SEZIONE UNIFICATA: PASTI & ALIMENTI CON SELETTORE / MENÙ A TENDINA */}
+                    {/* SEZIONE UNIFICATA: PASTI & ALIMENTI CON SELETTORE E BARRA DI RICERCA */}
                     {nutritionSubTab === 'pantry' && (
                       <div className="space-y-4 sm:space-y-5">
-                        <div className={`${cCard} border rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
-                          <div className="flex items-center gap-2.5">
-                            <div className="p-2 rounded-xl bg-emerald-500/20 border border-emerald-400/35 shrink-0">
-                              <Utensils className={`w-4 h-4 ${cEmerald}`} />
+                        <div className={`${cCard} border rounded-2xl p-3.5 sm:p-4 space-y-3`}>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 rounded-xl bg-emerald-500/20 border border-emerald-400/35 shrink-0">
+                                <Utensils className={`w-4 h-4 ${cEmerald}`} />
+                              </div>
+                              <div>
+                                <h3 className={`font-semibold text-sm sm:text-base ${cTextPrimary}`}>
+                                  Gestione Pasti &amp; Database Alimenti
+                                </h3>
+                                <p className={`text-xs ${cTextSecondary}`}>
+                                  Componi ricette, modifica singoli ingredienti e filtra rapidamente
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <h3 className={`font-semibold text-sm sm:text-base ${cTextPrimary}`}>
-                                Gestione Pasti &amp; Database Alimenti
-                              </h3>
-                              <p className={`text-xs ${cTextSecondary}`}>
-                                Scegli se comporre ricette complete oppure gestire i singoli ingredienti
-                              </p>
+
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                              <select
+                                value={pantryView}
+                                onChange={(e) => setPantryView(e.target.value)}
+                                aria-label="Seleziona modalità Pasti o Alimenti"
+                                className={`${cInput} border rounded-xl px-3.5 py-2.5 sm:py-2 font-semibold text-xs sm:text-sm focus:outline-none focus:border-emerald-400 cursor-pointer`}
+                              >
+                                <option value="composer" className={cOption}>
+                                  🍽️ Componi Pasti &amp; Ricettario ({data.meals.length})
+                                </option>
+                                <option value="foods" className={cOption}>
+                                  🥗 Database Alimenti Singoli ({data.foods.length})
+                                </option>
+                              </select>
+
+                              <div className={`grid grid-cols-2 p-1 rounded-xl border ${isLight ? 'bg-slate-100 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
+                                <button
+                                  type="button"
+                                  onClick={() => setPantryView('composer')}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                                    pantryView === 'composer'
+                                      ? 'bg-emerald-500 text-white shadow-sm'
+                                      : cTextSecondary
+                                  }`}
+                                >
+                                  Pasti ({data.meals.length})
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPantryView('foods')}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                                    pantryView === 'foods'
+                                      ? 'bg-emerald-500 text-white shadow-sm'
+                                      : cTextSecondary
+                                  }`}
+                                >
+                                  Alimenti ({data.foods.length})
+                                </button>
+                              </div>
                             </div>
                           </div>
 
-                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                            {/* Menù a tendina per passare velocemente tra Componi Pasti e Alimenti */}
-                            <select
-                              value={pantryView}
-                              onChange={(e) => setPantryView(e.target.value)}
-                              aria-label="Seleziona modalità Pasti o Alimenti"
-                              className={`${cInput} border rounded-xl px-3.5 py-2.5 sm:py-2 font-semibold text-xs sm:text-sm focus:outline-none focus:border-emerald-400 cursor-pointer`}
-                            >
-                              <option value="composer" className={cOption}>
-                                🍽️ Componi Pasti &amp; Ricettario ({data.meals.length})
-                              </option>
-                              <option value="foods" className={cOption}>
-                                🥗 Database Alimenti Singoli ({data.foods.length})
-                              </option>
-                            </select>
-
-                            {/* Toggle rapido a pulsanti per accesso immediato con 1 tap */}
-                            <div className={`grid grid-cols-2 p-1 rounded-xl border ${isLight ? 'bg-slate-100 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
+                          {/* BARRA DI RICERCA ISTANTANEA */}
+                          <div className="relative">
+                            <Search className={`w-4 h-4 ${cTextSecondary} absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none`} />
+                            <input
+                              type="text"
+                              value={pantrySearchQuery}
+                              onChange={(e) => setPantrySearchQuery(e.target.value)}
+                              placeholder={
+                                pantryView === 'composer'
+                                  ? 'Cerca un pasto per nome o per ingrediente (es. Pollo, Yogurt, Colazione)...'
+                                  : 'Cerca un alimento nel database (es. Riso, Uova, Banana)...'
+                              }
+                              className={`w-full ${cInput} border rounded-xl pl-10 pr-9 py-2.5 sm:py-2 focus:outline-none focus:border-emerald-400`}
+                            />
+                            {pantrySearchQuery && (
                               <button
                                 type="button"
-                                onClick={() => setPantryView('composer')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                                  pantryView === 'composer'
-                                    ? 'bg-emerald-500 text-white shadow-sm'
-                                    : cTextSecondary
-                                }`}
+                                onClick={() => setPantrySearchQuery('')}
+                                title="Cancella ricerca"
+                                className={`absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-lg ${cTextSecondary} hover:text-rose-400`}
                               >
-                                Pasti ({data.meals.length})
+                                <X className="w-4 h-4" />
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => setPantryView('foods')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                                  pantryView === 'foods'
-                                    ? 'bg-emerald-500 text-white shadow-sm'
-                                    : cTextSecondary
-                                }`}
-                              >
-                                Alimenti ({data.foods.length})
-                              </button>
-                            </div>
+                            )}
                           </div>
                         </div>
 
