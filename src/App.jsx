@@ -66,6 +66,14 @@ const FULL_DAYS = {
 
 const MEAL_SLOTS = ['Colazione', 'Pranzo', 'Cena', 'Spuntini'];
 
+const TIMER_SOUNDS = [
+  { id: 'chime', label: 'Chime Armonico' },
+  { id: 'boxing', label: 'Gong Palestra' },
+  { id: 'digital', label: 'Beep Digitale' },
+  { id: 'alert', label: 'Sveglia Rapida' },
+  { id: 'zen', label: 'Campana Soft' },
+];
+
 const WATER_PRESETS = [
   { label: 'Bicchiere', amount: 200 },
   { label: 'Bicchiere Grande', amount: 300 },
@@ -236,6 +244,23 @@ const INITIAL_LAYOUT = {
   workout: ['workoutHeader', 'exercisesList'],
 };
 
+const INITIAL_LIVE_WORKOUT_STATE = {
+  activeWorkoutId: 'wo-a',
+  completedSets: {},
+  autoStartTimer: true,
+  soundEnabled: true,
+  soundType: 'chime',
+  timer: {
+    initial: 90,
+    remainingWhenPaused: 90,
+    endAt: null,
+    running: false,
+    type: 'set',
+    label: '',
+    workContext: null,
+  },
+};
+
 const STORAGE_KEY = 'fittrack_pro_data_v1';
 
 function normalizeSlotEntry(entry) {
@@ -397,6 +422,39 @@ function normalizeWorkouts(rawWorkouts, defaultBetweenRest = 180) {
   }));
 }
 
+function normalizeLiveWorkoutState(rawLive, validWorkouts) {
+  const lws = rawLive && typeof rawLive === 'object' ? rawLive : {};
+  const t = lws.timer && typeof lws.timer === 'object' ? lws.timer : {};
+  const validIds = Array.isArray(validWorkouts) ? validWorkouts.map((w) => w.id) : [];
+  const chosenWorkoutId =
+    typeof lws.activeWorkoutId === 'string' && validIds.includes(lws.activeWorkoutId)
+      ? lws.activeWorkoutId
+      : validIds[0] || 'wo-a';
+  const validSoundIds = TIMER_SOUNDS.map((s) => s.id);
+
+  return {
+    activeWorkoutId: chosenWorkoutId,
+    completedSets:
+      lws.completedSets && typeof lws.completedSets === 'object' ? lws.completedSets : {},
+    autoStartTimer: typeof lws.autoStartTimer === 'boolean' ? lws.autoStartTimer : true,
+    soundEnabled: typeof lws.soundEnabled === 'boolean' ? lws.soundEnabled : true,
+    soundType: validSoundIds.includes(lws.soundType) ? lws.soundType : 'chime',
+    timer: {
+      initial: typeof t.initial === 'number' && t.initial > 0 ? t.initial : 90,
+      remainingWhenPaused:
+        typeof t.remainingWhenPaused === 'number' && t.remainingWhenPaused >= 0
+          ? t.remainingWhenPaused
+          : 90,
+      endAt: typeof t.endAt === 'number' && t.endAt > 0 ? t.endAt : null,
+      running: Boolean(t.running && typeof t.endAt === 'number' && t.endAt > 0),
+      type: ['set', 'exercise', 'work'].includes(t.type) ? t.type : 'set',
+      label: typeof t.label === 'string' ? t.label : '',
+      workContext:
+        t.workContext && typeof t.workContext === 'object' ? t.workContext : null,
+    },
+  };
+}
+
 function normalizeData(raw) {
   const safe = raw && typeof raw === 'object' ? raw : {};
   const layout = safe.layout && typeof safe.layout === 'object' ? safe.layout : {};
@@ -408,6 +466,8 @@ function normalizeData(raw) {
   if (!nutritionLayout.includes('todayDashboard')) {
     nutritionLayout = ['todayDashboard', ...nutritionLayout];
   }
+
+  const normalizedWorkouts = normalizeWorkouts(safe.workouts, globalBetweenRest);
 
   return {
     foods: Array.isArray(safe.foods) ? safe.foods : INITIAL_FOODS,
@@ -430,7 +490,8 @@ function normalizeData(raw) {
       goal: ['lean_bulk', 'recomp', 'bulk'].includes(bp.goal) ? bp.goal : INITIAL_BODY_PROFILE.goal,
       autoSyncWeight: typeof bp.autoSyncWeight === 'boolean' ? bp.autoSyncWeight : INITIAL_BODY_PROFILE.autoSyncWeight,
     },
-    workouts: normalizeWorkouts(safe.workouts, globalBetweenRest),
+    workouts: normalizedWorkouts,
+    liveWorkoutState: normalizeLiveWorkoutState(safe.liveWorkoutState, normalizedWorkouts),
     targets: safe.targets && typeof safe.targets === 'object' ? { ...INITIAL_TARGETS, ...safe.targets } : INITIAL_TARGETS,
     theme: safe.theme === 'light' ? 'light' : 'dark',
     betweenExerciseRest: globalBetweenRest,
@@ -446,25 +507,105 @@ function normalizeData(raw) {
   };
 }
 
-function playTimerBeep() {
+function playTimerBeep(soundType = 'chime') {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
-    const notes = [880, 1108.73, 1318.51];
-    notes.forEach((freq, idx) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.14);
-      gain.gain.setValueAtTime(0.18, ctx.currentTime + idx * 0.14);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.14 + 0.35);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(ctx.currentTime + idx * 0.14);
-      osc.stop(ctx.currentTime + idx * 0.14 + 0.36);
-    });
+    const now = ctx.currentTime;
+
+    if (soundType === 'boxing') {
+      // Doppio rintocco stile gong / campana da palestra
+      [0, 0.34].forEach((offset) => {
+        [330, 660, 990].forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = idx === 0 ? 'triangle' : 'sine';
+          osc.frequency.setValueAtTime(freq, now + offset);
+          const peak = idx === 0 ? 0.24 : 0.09;
+          gain.gain.setValueAtTime(peak, now + offset);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.55);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + offset);
+          osc.stop(now + offset + 0.56);
+        });
+      });
+    } else if (soundType === 'digital') {
+      // Classico cronometro sportivo (3 beep corti + 1 lungo)
+      const pattern = [
+        { start: 0, dur: 0.11, freq: 1000 },
+        { start: 0.16, dur: 0.11, freq: 1000 },
+        { start: 0.32, dur: 0.11, freq: 1000 },
+        { start: 0.48, dur: 0.36, freq: 1500 },
+      ];
+      pattern.forEach((step) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(step.freq, now + step.start);
+        gain.gain.setValueAtTime(0.11, now + step.start);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + step.start + step.dur);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + step.start);
+        osc.stop(now + step.start + step.dur + 0.02);
+      });
+    } else if (soundType === 'alert') {
+      // Sveglia rapida a doppio impulso ascendente
+      [0, 0.26].forEach((groupOffset) => {
+        [987.77, 1318.51].forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + groupOffset + i * 0.09);
+          gain.gain.setValueAtTime(0.2, now + groupOffset + i * 0.09);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + groupOffset + i * 0.09 + 0.12);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + groupOffset + i * 0.09);
+          osc.stop(now + groupOffset + i * 0.09 + 0.13);
+        });
+      });
+    } else if (soundType === 'zen') {
+      // Campana singola morbida e prolungata
+      [528, 1056].forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now);
+        gain.gain.setValueAtTime(idx === 0 ? 0.22 : 0.07, now);
+        gain.gain.exponentialRampToValueAtTime(0.0008, now + 1.15);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 1.16);
+      });
+    } else {
+      // Default: Chime Armonico (triade maggiore ascendente)
+      const notes = [880, 1108.73, 1318.51];
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.14);
+        gain.gain.setValueAtTime(0.18, now + idx * 0.14);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.14 + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + idx * 0.14);
+        osc.stop(now + idx * 0.14 + 0.36);
+      });
+    }
   } catch (e) {}
+}
+
+function computeRemainingSecondsFromTimerState(timerObj, nowMs = Date.now()) {
+  if (!timerObj) return 90;
+  if (timerObj.running && typeof timerObj.endAt === 'number') {
+    return Math.max(0, Math.ceil((timerObj.endAt - nowMs) / 1000));
+  }
+  return Math.max(0, Math.round(timerObj.remainingWhenPaused ?? timerObj.initial ?? 90));
 }
 
 export default function App() {
@@ -478,7 +619,6 @@ export default function App() {
 
   const isLight = data.theme === 'light';
   const [reorderMode, setReorderMode] = useState(false);
-
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -620,7 +760,7 @@ export default function App() {
       } catch (err) {
         setSyncStatus('error');
       }
-    }, 700);
+    }, 350);
 
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -693,93 +833,267 @@ export default function App() {
   const [selectedDrinkType, setSelectedDrinkType] = useState('water');
   const [editingWaterConfig, setEditingWaterConfig] = useState(false);
 
-  const [activeWorkoutId, setActiveWorkoutId] = useState('wo-a');
-  const [workoutMode, setWorkoutMode] = useState('live');
-  const [completedSets, setCompletedSets] = useState({});
-  const [autoStartTimer, setAutoStartTimer] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  // Stato workout persistito in data.liveWorkoutState (sincronizzato su localStorage + Supabase)
+  const liveState = data.liveWorkoutState || INITIAL_LIVE_WORKOUT_STATE;
+  const activeWorkoutId = liveState.activeWorkoutId;
+  const completedSets = liveState.completedSets || {};
+  const autoStartTimer = liveState.autoStartTimer !== false;
+  const soundEnabled = liveState.soundEnabled !== false;
+  const soundType = liveState.soundType || 'chime';
+  const persistedTimer = liveState.timer || INITIAL_LIVE_WORKOUT_STATE.timer;
 
+  const [workoutMode, setWorkoutMode] = useState('live');
   const [isEditingWorkoutTitle, setIsEditingWorkoutTitle] = useState(false);
   const [tempWorkoutDayLabel, setTempWorkoutDayLabel] = useState('');
   const [tempWorkoutTitle, setTempWorkoutTitle] = useState('');
   const [tempWorkoutFocus, setTempWorkoutFocus] = useState('');
 
-  // Timer: type può essere 'set' (recupero serie), 'exercise' (cambio esercizio) o 'work' (esecuzione serie a tempo)
-  const [timerSeconds, setTimerSeconds] = useState(90);
-  const [timerInitial, setTimerInitial] = useState(90);
-  const [timerRunning, setTimerRunning] = useState(false);
+  // Tick visivo ogni 250ms calcolato rispetto al timestamp assoluto endAt
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const [timerFinishedAlert, setTimerFinishedAlert] = useState(false);
-  const [timerType, setTimerType] = useState('set');
-  const [timerLabel, setTimerLabel] = useState('');
-  const [activeWorkContext, setActiveWorkContext] = useState(null);
+  const lastCompletedTimerEndAtRef = useRef(null);
 
-  const startTimer = useCallback((seconds, type = 'set', label = '', workCtx = null) => {
-    setTimerFinishedAlert(false);
-    setTimerType(type);
-    setTimerLabel(label);
-    setActiveWorkContext(type === 'work' ? workCtx : null);
-    setTimerInitial(seconds);
-    setTimerSeconds(seconds);
-    setTimerRunning(true);
+  const timerSeconds = computeRemainingSecondsFromTimerState(persistedTimer, nowTick);
+  const timerInitial = persistedTimer.initial || 90;
+  const timerRunning = Boolean(persistedTimer.running && timerSeconds > 0);
+  const timerType = persistedTimer.type || 'set';
+  const timerLabel = persistedTimer.label || '';
+
+  const updateLiveWorkoutState = useCallback((updater) => {
+    setData((prev) => {
+      const currentLive = prev.liveWorkoutState || INITIAL_LIVE_WORKOUT_STATE;
+      const nextLive = typeof updater === 'function' ? updater(currentLive, prev) : { ...currentLive, ...updater };
+      return {
+        ...prev,
+        liveWorkoutState: nextLive,
+      };
+    });
   }, []);
 
+  const setActiveWorkoutId = (woId) => {
+    updateLiveWorkoutState((curr) => ({ ...curr, activeWorkoutId: woId }));
+  };
+
+  const setAutoStartTimer = (val) => {
+    updateLiveWorkoutState((curr) => ({ ...curr, autoStartTimer: Boolean(val) }));
+  };
+
+  const setSoundEnabled = (val) => {
+    updateLiveWorkoutState((curr) => ({ ...curr, soundEnabled: Boolean(val) }));
+  };
+
+  const handleSelectSoundType = (nextSound) => {
+    updateLiveWorkoutState((curr) => ({
+      ...curr,
+      soundEnabled: true,
+      soundType: nextSound,
+    }));
+    playTimerBeep(nextSound);
+  };
+
+  const startTimer = useCallback(
+    (seconds, type = 'set', label = '', workCtx = null) => {
+      const safeSec = Math.max(1, Math.round(Number(seconds) || 60));
+      const now = Date.now();
+      lastCompletedTimerEndAtRef.current = null;
+      setTimerFinishedAlert(false);
+      setNowTick(now);
+
+      updateLiveWorkoutState((curr) => ({
+        ...curr,
+        timer: {
+          initial: safeSec,
+          remainingWhenPaused: safeSec,
+          endAt: now + safeSec * 1000,
+          running: true,
+          type,
+          label,
+          workContext: type === 'work' ? workCtx : null,
+        },
+      }));
+    },
+    [updateLiveWorkoutState]
+  );
+
+  // Intervallo leggero che aggiorna nowTick finché un timer è attivo
   useEffect(() => {
-    if (!timerRunning) return;
+    if (!persistedTimer.running) return;
     const interval = setInterval(() => {
-      setTimerSeconds((prev) => {
-        if (prev <= 1) {
-          setTimerRunning(false);
-          setTimerFinishedAlert(true);
-          if (soundEnabled) playTimerBeep();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+      setNowTick(Date.now());
+    }, 250);
     return () => clearInterval(interval);
-  }, [timerRunning, soundEnabled]);
+  }, [persistedTimer.running, persistedTimer.endAt]);
 
-  // Se era in corso una serie a tempo ("work") ed è appena terminata, spunta la serie e avvia la pausa!
+  // Rilevamento naturale (o al ricaricamento/cambio dispositivo) di timer scaduto
   useEffect(() => {
-    if (!timerRunning && timerSeconds === 0 && timerType === 'work' && activeWorkContext) {
-      const ctx = activeWorkContext;
-      setActiveWorkContext(null);
+    if (!persistedTimer.running || typeof persistedTimer.endAt !== 'number') return;
+    const remaining = Math.ceil((persistedTimer.endAt - nowTick) / 1000);
+    if (remaining > 0) return;
 
-      setCompletedSets((prev) => {
+    if (lastCompletedTimerEndAtRef.current === persistedTimer.endAt) return;
+    lastCompletedTimerEndAtRef.current = persistedTimer.endAt;
+
+    setTimerFinishedAlert(true);
+    if (soundEnabled) playTimerBeep(soundType);
+
+    const finishedType = persistedTimer.type;
+    const ctx = persistedTimer.workContext;
+
+    setData((prev) => {
+      const currentLive = prev.liveWorkoutState || INITIAL_LIVE_WORKOUT_STATE;
+      let nextCompletedSets = currentLive.completedSets || {};
+      let nextTimer = {
+        ...currentLive.timer,
+        running: false,
+        endAt: null,
+        remainingWhenPaused: 0,
+        workContext: null,
+      };
+
+      if (finishedType === 'work' && ctx && ctx.exerciseId != null) {
         const key = `${ctx.exerciseId}-${ctx.setIndex}`;
-        const nextCompleted = { ...prev, [key]: true };
+        nextCompletedSets = { ...nextCompletedSets, [key]: true };
 
-        const wo = data.workouts.find((w) => w.id === ctx.workoutId);
+        const wo = prev.workouts.find((w) => w.id === ctx.workoutId);
         const ex = wo?.exercises.find((e) => e.id === ctx.exerciseId);
-        if (ex && autoStartTimer) {
+        if (ex && currentLive.autoStartTimer !== false) {
           let allDone = true;
           for (let i = 0; i < ex.sets; i++) {
-            if (!nextCompleted[`${ex.id}-${i}`]) {
+            if (!nextCompletedSets[`${ex.id}-${i}`]) {
               allDone = false;
               break;
             }
           }
-          setTimeout(() => {
-            if (allDone) {
-              const exRest = getExerciseTransitionRest(ex, data.betweenExerciseRest || 180);
-              startTimer(exRest, 'exercise', 'Verso es. succ.');
-            } else {
-              const transitionIdx = Math.min(ctx.setIndex, Math.max(0, ex.sets - 2));
-              const specificRest = getSetRestSeconds(ex, transitionIdx);
-              startTimer(specificRest, 'set', `S${transitionIdx + 1}→S${transitionIdx + 2}`);
-            }
-          }, 350);
+          const now = Date.now();
+          if (allDone) {
+            const exRest = Math.max(1, getExerciseTransitionRest(ex, prev.betweenExerciseRest || 180));
+            nextTimer = {
+              initial: exRest,
+              remainingWhenPaused: exRest,
+              endAt: now + exRest * 1000,
+              running: true,
+              type: 'exercise',
+              label: 'Verso es. succ.',
+              workContext: null,
+            };
+          } else {
+            const transitionIdx = Math.min(ctx.setIndex, Math.max(0, ex.sets - 2));
+            const specificRest = Math.max(1, getSetRestSeconds(ex, transitionIdx));
+            nextTimer = {
+              initial: specificRest,
+              remainingWhenPaused: specificRest,
+              endAt: now + specificRest * 1000,
+              running: true,
+              type: 'set',
+              label: `S${transitionIdx + 1}→S${transitionIdx + 2}`,
+              workContext: null,
+            };
+          }
         }
+      }
 
-        return nextCompleted;
-      });
-    }
-  }, [timerRunning, timerSeconds, timerType, activeWorkContext, autoStartTimer, data.workouts, data.betweenExerciseRest, startTimer]);
+      return {
+        ...prev,
+        liveWorkoutState: {
+          ...currentLive,
+          completedSets: nextCompletedSets,
+          timer: nextTimer,
+        },
+      };
+    });
+  }, [persistedTimer, nowTick, soundEnabled, soundType]);
+
+  const togglePlayPauseTimer = () => {
+    const now = Date.now();
+    setTimerFinishedAlert(false);
+    setNowTick(now);
+
+    updateLiveWorkoutState((curr) => {
+      const t = curr.timer || INITIAL_LIVE_WORKOUT_STATE.timer;
+      const currentRem = computeRemainingSecondsFromTimerState(t, now);
+
+      if (t.running && currentRem > 0) {
+        return {
+          ...curr,
+          timer: {
+            ...t,
+            running: false,
+            endAt: null,
+            remainingWhenPaused: currentRem,
+          },
+        };
+      } else {
+        const resumeSec = currentRem > 0 ? currentRem : t.initial || 90;
+        lastCompletedTimerEndAtRef.current = null;
+        return {
+          ...curr,
+          timer: {
+            ...t,
+            running: true,
+            endAt: now + resumeSec * 1000,
+            remainingWhenPaused: resumeSec,
+          },
+        };
+      }
+    });
+  };
+
+  const resetCurrentTimer = () => {
+    const now = Date.now();
+    lastCompletedTimerEndAtRef.current = null;
+    setTimerFinishedAlert(false);
+    setNowTick(now);
+
+    updateLiveWorkoutState((curr) => {
+      const t = curr.timer || INITIAL_LIVE_WORKOUT_STATE.timer;
+      const initSec = t.initial || 90;
+      return {
+        ...curr,
+        timer: {
+          ...t,
+          running: false,
+          endAt: null,
+          remainingWhenPaused: initSec,
+          workContext: null,
+        },
+      };
+    });
+  };
 
   const adjustTimer = (delta) => {
+    const now = Date.now();
+    lastCompletedTimerEndAtRef.current = null;
     setTimerFinishedAlert(false);
-    setTimerSeconds((prev) => Math.max(0, prev + delta));
-    setTimerInitial((prev) => Math.max(15, prev + delta));
+    setNowTick(now);
+
+    updateLiveWorkoutState((curr) => {
+      const t = curr.timer || INITIAL_LIVE_WORKOUT_STATE.timer;
+      const currentRem = computeRemainingSecondsFromTimerState(t, now);
+      const nextRem = Math.max(0, currentRem + delta);
+      const nextInit = Math.max(15, (t.initial || 90) + delta);
+
+      if (t.running && nextRem > 0) {
+        return {
+          ...curr,
+          timer: {
+            ...t,
+            initial: nextInit,
+            remainingWhenPaused: nextRem,
+            endAt: now + nextRem * 1000,
+          },
+        };
+      }
+      return {
+        ...curr,
+        timer: {
+          ...t,
+          initial: nextInit,
+          running: false,
+          endAt: null,
+          remainingWhenPaused: nextRem,
+        },
+      };
+    });
   };
 
   const getFoodById = (id) => data.foods.find((f) => f.id === id);
@@ -1239,44 +1553,75 @@ export default function App() {
 
   const toggleSetCompleted = (exercise, setIndex) => {
     const key = `${exercise.id}-${setIndex}`;
-    const nextState = !completedSets[key];
-    const nextCompleted = { ...completedSets, [key]: nextState };
-    setCompletedSets(nextCompleted);
+    const currentToday = getTodayIso();
+    const now = Date.now();
 
-    if (nextState) {
-      const currentToday = getTodayIso();
-      setData((prev) => {
-        if (prev.waterSettings?.workoutDates?.[currentToday]) return prev;
-        return {
-          ...prev,
-          waterSettings: {
-            ...prev.waterSettings,
-            workoutDates: {
-              ...(prev.waterSettings?.workoutDates || {}),
-              [currentToday]: true,
-            },
+    setData((prev) => {
+      const currentLive = prev.liveWorkoutState || INITIAL_LIVE_WORKOUT_STATE;
+      const prevCompleted = currentLive.completedSets || {};
+      const nextState = !prevCompleted[key];
+      const nextCompleted = { ...prevCompleted, [key]: nextState };
+
+      let nextWaterSettings = prev.waterSettings;
+      if (nextState && !prev.waterSettings?.workoutDates?.[currentToday]) {
+        nextWaterSettings = {
+          ...prev.waterSettings,
+          workoutDates: {
+            ...(prev.waterSettings?.workoutDates || {}),
+            [currentToday]: true,
           },
         };
-      });
-    }
+      }
 
-    if (nextState && autoStartTimer) {
-      let allDone = true;
-      for (let i = 0; i < exercise.sets; i++) {
-        if (!nextCompleted[`${exercise.id}-${i}`]) {
-          allDone = false;
-          break;
+      let nextTimer = currentLive.timer || INITIAL_LIVE_WORKOUT_STATE.timer;
+      if (nextState && currentLive.autoStartTimer !== false) {
+        let allDone = true;
+        for (let i = 0; i < exercise.sets; i++) {
+          if (!nextCompleted[`${exercise.id}-${i}`]) {
+            allDone = false;
+            break;
+          }
+        }
+        lastCompletedTimerEndAtRef.current = null;
+        setTimerFinishedAlert(false);
+        setNowTick(now);
+
+        if (allDone) {
+          const exRest = Math.max(1, getExerciseTransitionRest(exercise, prev.betweenExerciseRest || 180));
+          nextTimer = {
+            initial: exRest,
+            remainingWhenPaused: exRest,
+            endAt: now + exRest * 1000,
+            running: true,
+            type: 'exercise',
+            label: 'Verso es. succ.',
+            workContext: null,
+          };
+        } else {
+          const transitionIdx = Math.min(setIndex, Math.max(0, exercise.sets - 2));
+          const specificRest = Math.max(1, getSetRestSeconds(exercise, transitionIdx));
+          nextTimer = {
+            initial: specificRest,
+            remainingWhenPaused: specificRest,
+            endAt: now + specificRest * 1000,
+            running: true,
+            type: 'set',
+            label: `S${transitionIdx + 1}→S${transitionIdx + 2}`,
+            workContext: null,
+          };
         }
       }
-      if (allDone) {
-        const exRest = getExerciseTransitionRest(exercise, data.betweenExerciseRest || 180);
-        startTimer(exRest, 'exercise', 'Verso es. succ.');
-      } else {
-        const transitionIdx = Math.min(setIndex, Math.max(0, exercise.sets - 2));
-        const specificRest = getSetRestSeconds(exercise, transitionIdx);
-        startTimer(specificRest, 'set', `S${transitionIdx + 1}→S${transitionIdx + 2}`);
-      }
-    }
+
+      return {
+        ...prev,
+        waterSettings: nextWaterSettings,
+        liveWorkoutState: {
+          ...currentLive,
+          completedSets: nextCompleted,
+          timer: nextTimer,
+        },
+      };
+    });
   };
 
   const startTimedExerciseWork = (exercise) => {
@@ -1289,24 +1634,44 @@ export default function App() {
       }
     }
     const currentToday = getTodayIso();
+    const now = Date.now();
+    lastCompletedTimerEndAtRef.current = null;
+    setTimerFinishedAlert(false);
+    setNowTick(now);
+
     setData((prev) => {
-      if (prev.waterSettings?.workoutDates?.[currentToday]) return prev;
+      const currentLive = prev.liveWorkoutState || INITIAL_LIVE_WORKOUT_STATE;
+      const nextWaterSettings =
+        prev.waterSettings?.workoutDates?.[currentToday]
+          ? prev.waterSettings
+          : {
+              ...prev.waterSettings,
+              workoutDates: {
+                ...(prev.waterSettings?.workoutDates || {}),
+                [currentToday]: true,
+              },
+            };
+
       return {
         ...prev,
-        waterSettings: {
-          ...prev.waterSettings,
-          workoutDates: {
-            ...(prev.waterSettings?.workoutDates || {}),
-            [currentToday]: true,
+        waterSettings: nextWaterSettings,
+        liveWorkoutState: {
+          ...currentLive,
+          timer: {
+            initial: sec,
+            remainingWhenPaused: sec,
+            endAt: now + sec * 1000,
+            running: true,
+            type: 'work',
+            label: `Serie ${nextUncompletedIdx + 1}/${exercise.sets}`,
+            workContext: {
+              workoutId: activeWorkoutId,
+              exerciseId: exercise.id,
+              setIndex: nextUncompletedIdx,
+            },
           },
         },
       };
-    });
-
-    startTimer(sec, 'work', `Serie ${nextUncompletedIdx + 1}/${exercise.sets}`, {
-      workoutId: activeWorkoutId,
-      exerciseId: exercise.id,
-      setIndex: nextUncompletedIdx,
     });
   };
 
@@ -1612,22 +1977,33 @@ export default function App() {
   const handleResetWorkoutPage = () => {
     if (!currentWorkout) return;
     if (!window.confirm(`Vuoi azzerare a 0 spunte, carichi (kg) e timer per "${currentWorkout.dayLabel}"?`)) return;
-    setCompletedSets({});
-    setActiveWorkContext(null);
-    setTimerRunning(false);
+    lastCompletedTimerEndAtRef.current = null;
     setTimerFinishedAlert(false);
-    setTimerSeconds(0);
-    setData((prev) => ({
-      ...prev,
-      workouts: prev.workouts.map((wo) =>
-        wo.id === activeWorkoutId
-          ? {
-              ...wo,
-              exercises: wo.exercises.map((ex) => ({ ...ex, weight: 0 })),
-            }
-          : wo
-      ),
-    }));
+    setData((prev) => {
+      const currentLive = prev.liveWorkoutState || INITIAL_LIVE_WORKOUT_STATE;
+      return {
+        ...prev,
+        workouts: prev.workouts.map((wo) =>
+          wo.id === activeWorkoutId
+            ? {
+                ...wo,
+                exercises: wo.exercises.map((ex) => ({ ...ex, weight: 0 })),
+              }
+            : wo
+        ),
+        liveWorkoutState: {
+          ...currentLive,
+          completedSets: {},
+          timer: {
+            ...currentLive.timer,
+            running: false,
+            endAt: null,
+            remainingWhenPaused: 0,
+            workContext: null,
+          },
+        },
+      };
+    });
   };
 
   const handleExportJSON = () => {
@@ -1657,6 +2033,8 @@ export default function App() {
 
   const handleResetDemo = () => {
     if (!window.confirm('Vuoi ripristinare i dati dimostrativi iniziali?')) return;
+    lastCompletedTimerEndAtRef.current = null;
+    setTimerFinishedAlert(false);
     setData((prev) =>
       normalizeData({
         foods: INITIAL_FOODS,
@@ -1667,14 +2045,13 @@ export default function App() {
         waterSettings: INITIAL_WATER_SETTINGS,
         bodyProfile: INITIAL_BODY_PROFILE,
         workouts: INITIAL_WORKOUTS,
+        liveWorkoutState: INITIAL_LIVE_WORKOUT_STATE,
         targets: INITIAL_TARGETS,
         theme: prev.theme,
         layout: INITIAL_LAYOUT,
         betweenExerciseRest: 180,
       })
     );
-    setCompletedSets({});
-    setActiveWorkContext(null);
     cancelEditFood();
     cancelEditComposedMeal();
   };
@@ -3823,10 +4200,7 @@ export default function App() {
                     </div>
                     {completedSetsInWorkout > 0 && (
                       <button
-                        onClick={() => {
-                          setCompletedSets({});
-                          setActiveWorkContext(null);
-                        }}
+                        onClick={() => updateLiveWorkoutState((curr) => ({ ...curr, completedSets: {} }))}
                         className={`text-xs px-2.5 py-1.5 rounded-lg ${cInner} border ${cTextSecondary}`}
                       >
                         Reset
@@ -5087,8 +5461,8 @@ export default function App() {
                               onChange={(e) => setPantrySearchQuery(e.target.value)}
                               placeholder={
                                 pantryView === 'composer'
-                                  ? 'Cerca un pasto per nome o per ingrediente (es. Pollo, Yogurt, Colazione)...'
-                                  : 'Cerca un alimento nel database (es. Riso, Uova, Banana)...'
+                                  ? 'Cerca un pasto per nome o per ingrediente (es. Pollo, Yogurt)...'
+                                  : 'Cerca un alimento nel database (es. Pasta, Uova, Mandorle)...'
                               }
                               className={`w-full ${cInput} border rounded-xl pl-10 pr-9 py-2.5 sm:py-2 focus:outline-none focus:border-emerald-400`}
                             />
@@ -5097,19 +5471,21 @@ export default function App() {
                                 type="button"
                                 onClick={() => setPantrySearchQuery('')}
                                 title="Cancella ricerca"
-                                className={`absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-lg ${cTextSecondary} hover:text-rose-400`}
+                                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md ${cTextSecondary} hover:text-rose-400`}
                               >
-                                <X className="w-4 h-4" />
+                                <X className="w-3.5 h-3.5" />
                               </button>
                             )}
                           </div>
                         </div>
 
-                        {pantryView === 'composer' ? (
+                        {pantryView === 'composer' && (
                           <div className="space-y-4 sm:space-y-5">
                             {data.layout.composer.map((cId) => composerSections[cId] || null)}
                           </div>
-                        ) : (
+                        )}
+
+                        {pantryView === 'foods' && (
                           <div className="space-y-4 sm:space-y-5">
                             {data.layout.foods.map((fId) => foodsSections[fId] || null)}
                           </div>
@@ -5139,159 +5515,178 @@ export default function App() {
 
         {activeTab === 'workout' && (
           <div className="space-y-4 sm:space-y-5">
-            {data.layout.workout.map((wId) => workoutSections[wId] || null)}
+            {data.layout.workout.map((woSecId) => workoutSections[woSecId] || null)}
           </div>
         )}
       </main>
 
-      {/* BARRA FLOATING TIMER FULL-WIDTH */}
-      <div
-        className={`fixed bottom-0 inset-x-0 z-40 w-full backdrop-blur-lg border-t shadow-2xl transition-colors pb-[env(safe-area-inset-bottom)] ${
-          isLight
-            ? 'bg-white/95 border-slate-200'
-            : 'bg-slate-900/95 border-slate-700'
-        }`}
-      >
-        <div className="w-full px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-2">
-          <div className="flex items-center justify-between md:justify-start gap-2.5">
-            <div className="flex items-center gap-2">
-              <div
-                className={`px-3 py-1 rounded-xl font-mono text-lg sm:text-xl font-bold border transition leading-tight ${
-                  timerFinishedAlert
-                    ? 'bg-emerald-500 text-white border-emerald-400 animate-pulse'
-                    : timerRunning
-                    ? timerType === 'work'
-                      ? `bg-emerald-500/25 ${cEmerald} border-emerald-400/60`
+      {/* FLOATING REST & EXECUTION TIMER BAR FULL-WIDTH */}
+      {activeTab === 'workout' && (
+        <div
+          className={`fixed bottom-0 inset-x-0 z-40 backdrop-blur-xl border-t px-3 sm:px-6 lg:px-8 pt-2.5 pb-[calc(0.65rem+env(safe-area-inset-bottom))] shadow-2xl transition-colors ${
+            timerFinishedAlert
+              ? isLight
+                ? 'bg-emerald-50/95 border-emerald-400'
+                : 'bg-emerald-950/95 border-emerald-400/70'
+              : timerType === 'work'
+              ? isLight
+                ? 'bg-emerald-50/95 border-emerald-300'
+                : 'bg-slate-900/95 border-emerald-500/45'
+              : timerType === 'exercise'
+              ? isLight
+                ? 'bg-amber-50/95 border-amber-300'
+                : 'bg-slate-900/95 border-amber-500/45'
+              : isLight
+              ? 'bg-white/95 border-slate-200'
+              : 'bg-slate-900/95 border-slate-700'
+          }`}
+        >
+          <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4">
+            <div className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-3">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`p-2 rounded-xl border ${
+                    timerFinishedAlert
+                      ? 'bg-emerald-500 border-emerald-300 text-white animate-bounce'
+                      : timerType === 'work'
+                      ? 'bg-emerald-500/20 border-emerald-400/40'
                       : timerType === 'exercise'
-                      ? `bg-amber-500/20 ${cAmber} border-amber-400/60`
-                      : `bg-indigo-500/25 ${cIndigo} border-indigo-400/60`
-                    : `${cInner} ${cTextPrimary}`
-                }`}
-              >
-                {formatSeconds(timerSeconds)}
+                      ? 'bg-amber-500/20 border-amber-400/40'
+                      : 'bg-indigo-500/20 border-indigo-400/40'
+                  }`}
+                >
+                  {timerType === 'work' ? (
+                    <Timer className={`w-5 h-5 ${timerFinishedAlert ? 'text-white' : cEmerald}`} />
+                  ) : timerType === 'exercise' ? (
+                    <SkipForward className={`w-5 h-5 ${timerFinishedAlert ? 'text-white' : cAmber}`} />
+                  ) : (
+                    <Clock className={`w-5 h-5 ${timerFinishedAlert ? 'text-white' : cIndigo}`} />
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                        timerFinishedAlert
+                          ? 'bg-emerald-500 text-white'
+                          : timerType === 'work'
+                          ? `bg-emerald-500/20 ${cEmerald}`
+                          : timerType === 'exercise'
+                          ? `bg-amber-500/20 ${cAmber}`
+                          : `bg-indigo-500/20 ${cIndigo}`
+                      }`}
+                    >
+                      {timerFinishedAlert
+                        ? 'Tempo Scaduto!'
+                        : timerType === 'work'
+                        ? 'Esecuzione'
+                        : timerType === 'exercise'
+                        ? 'Cambio Es.'
+                        : 'Recupero Serie'}
+                    </span>
+                    {timerLabel && !timerFinishedAlert && (
+                      <span className={`text-[10px] font-semibold ${cTextSecondary}`}>• {timerLabel}</span>
+                    )}
+                  </div>
+                  <div
+                    className={`text-2xl font-mono font-bold tracking-tight leading-none mt-1 ${
+                      timerFinishedAlert
+                        ? cEmerald
+                        : timerSeconds <= 10 && timerRunning
+                        ? cRose
+                        : cTextPrimary
+                    }`}
+                  >
+                    {formatSeconds(timerSeconds)}
+                  </div>
+                </div>
               </div>
-              <span
-                className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                  timerType === 'work'
-                    ? `bg-emerald-500/20 ${cEmerald}`
-                    : timerType === 'exercise'
-                    ? `bg-amber-500/20 ${cAmber}`
-                    : `bg-indigo-500/20 ${cIndigo}`
-                }`}
-              >
-                {timerLabel || (timerType === 'work' ? 'In Esecuzione' : timerType === 'exercise' ? 'Cambio Es.' : 'Tra Serie')}
-              </span>
-            </div>
 
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => {
-                  setTimerFinishedAlert(false);
-                  if (timerSeconds === 0) setTimerSeconds(timerInitial);
-                  setTimerRunning(!timerRunning);
-                }}
-                className={`p-2.5 rounded-xl text-white transition ${
-                  timerType === 'work'
-                    ? 'bg-emerald-600 hover:bg-emerald-500'
-                    : timerType === 'exercise'
-                    ? 'bg-amber-600 hover:bg-amber-500'
-                    : 'bg-indigo-600 hover:bg-indigo-500'
-                }`}
-              >
-                {timerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
-              </button>
-
-              <button
-                onClick={() => {
-                  setTimerRunning(false);
-                  setTimerFinishedAlert(false);
-                  setActiveWorkContext(null);
-                  setTimerSeconds(timerInitial);
-                }}
-                className={`p-2.5 rounded-xl transition ${
-                  isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
-                }`}
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => adjustTimer(-15)}
-                className={`px-2 py-2 rounded-xl ${cInner} border text-xs font-semibold ${cTextPrimary}`}
-              >
-                -15s
-              </button>
-              <button
-                onClick={() => adjustTimer(15)}
-                className={`px-2 py-2 rounded-xl ${cInner} border text-xs font-semibold ${cTextPrimary}`}
-              >
-                +15s
-              </button>
-
-              <button
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                className={`p-2.5 rounded-xl transition ${
-                  isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
-                }`}
-              >
-                {soundEnabled ? <Volume2 className={`w-4 h-4 ${cEmerald}`} /> : <VolumeX className={`w-4 h-4 ${cTextSecondary}`} />}
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between md:justify-end gap-1.5 overflow-x-auto">
-            <div className="flex items-center gap-1">
-              <span className={`text-[10px] uppercase font-bold ${cTextSecondary} mr-0.5`}>
-                Serie:
-              </span>
-              {[60, 90, 120].map((sec) => (
+              <div className="flex items-center gap-1">
                 <button
-                  key={sec}
-                  onClick={() => startTimer(sec, 'set', 'Tra Serie')}
-                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
-                    timerType === 'set' && timerInitial === sec
-                      ? `bg-indigo-500/25 border-indigo-400/60 ${cIndigo}`
-                      : `${cInner} ${cTextPrimary}`
+                  onClick={() => adjustTimer(-15)}
+                  className={`px-2.5 py-1.5 text-xs rounded-lg ${cInner} border ${cTextPrimary} font-semibold`}
+                >
+                  -15s
+                </button>
+                <button
+                  onClick={() => adjustTimer(+15)}
+                  className={`px-2.5 py-1.5 text-xs rounded-lg ${cInner} border ${cTextPrimary} font-semibold`}
+                >
+                  +15s
+                </button>
+              </div>
+            </div>
+
+            <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-2">
+              <div className="flex items-center gap-1.5 flex-1 sm:flex-none">
+                <button
+                  onClick={togglePlayPauseTimer}
+                  className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 rounded-xl text-xs font-bold transition ${
+                    timerRunning
+                      ? 'bg-amber-500 text-slate-950'
+                      : timerType === 'work'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-indigo-600 text-white'
                   }`}
                 >
-                  {sec}s
+                  {timerRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                  {timerRunning ? 'Pausa' : 'Avvia'}
                 </button>
-              ))}
-            </div>
 
-            <div className={`h-5 w-px mx-0.5 ${isLight ? 'bg-slate-300' : 'bg-slate-700'}`} />
-
-            <div className="flex items-center gap-1">
-              <span className={`text-[10px] uppercase font-bold ${cAmber} mr-0.5`}>
-                Es.:
-              </span>
-              {[120, 150, 180].map((sec) => (
                 <button
-                  key={sec}
-                  onClick={() => startTimer(sec, 'exercise', 'Cambio Es.')}
-                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
-                    timerType === 'exercise' && timerInitial === sec
-                      ? `bg-amber-500/25 border-amber-400/60 ${cAmber}`
-                      : `${cInner} ${cAmber}`
-                  }`}
+                  onClick={resetCurrentTimer}
+                  className={`p-2.5 sm:p-2 rounded-xl ${cInner} border ${cTextPrimary}`}
                 >
-                  {sec === 150 ? '2m30' : `${sec / 60}m`}
+                  <RotateCcw className="w-4 h-4" />
                 </button>
-              ))}
-            </div>
+              </div>
 
-            <label className={`hidden lg:flex items-center gap-1.5 ml-1.5 text-xs ${cTextSecondary} cursor-pointer select-none`}>
-              <input
-                type="checkbox"
-                checked={autoStartTimer}
-                onChange={(e) => setAutoStartTimer(e.target.checked)}
-                className="rounded accent-indigo-400"
-              />
-              Auto-avvio
-            </label>
+              <div className="flex items-center gap-1.5">
+                <label className={`flex items-center gap-1.5 text-xs ${cTextSecondary} cursor-pointer select-none px-2`}>
+                  <input
+                    type="checkbox"
+                    checked={autoStartTimer}
+                    onChange={(e) => setAutoStartTimer(e.target.checked)}
+                    className="rounded accent-indigo-500"
+                  />
+                  <span>Auto</span>
+                </label>
+
+                <div className={`flex items-center rounded-xl border overflow-hidden ${cInner}`}>
+                  <button
+                    type="button"
+                    onClick={() => setSoundEnabled(!soundEnabled)}
+                    title={soundEnabled ? 'Disattiva suono fine timer' : 'Attiva suono fine timer'}
+                    className={`p-2.5 sm:p-2 transition ${
+                      soundEnabled
+                        ? `bg-indigo-500/20 ${cIndigo}`
+                        : `${cTextSecondary} opacity-60`
+                    }`}
+                  >
+                    {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                  </button>
+
+                  <select
+                    value={soundType}
+                    onChange={(e) => handleSelectSoundType(e.target.value)}
+                    disabled={!soundEnabled}
+                    aria-label="Scegli suono fine timer"
+                    title="Scegli il suono di fine timer (riproduce un'anteprima)"
+                    className={`bg-transparent px-2 py-2 sm:py-1.5 text-xs font-semibold focus:outline-none cursor-pointer disabled:opacity-40 ${cTextPrimary}`}
+                  >
+                    {TIMER_SOUNDS.map((s) => (
+                      <option key={s.id} value={s.id} className={cOption}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
