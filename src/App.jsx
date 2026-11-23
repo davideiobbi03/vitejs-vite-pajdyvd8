@@ -346,6 +346,13 @@ function getTodayIso() {
   return getLocalIsoDate(new Date());
 }
 
+function getMondayIsoForDate(dateObj = new Date()) {
+  const jsDay = dateObj.getDay();
+  const diffToMonday = jsDay === 0 ? -6 : 1 - jsDay;
+  const monday = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate() + diffToMonday);
+  return getLocalIsoDate(monday);
+}
+
 function getTodayDayKey(dateObj = new Date()) {
   const jsDay = dateObj.getDay();
   return jsDay === 0 ? 'Dom' : DAYS[jsDay - 1];
@@ -468,11 +475,20 @@ function normalizeData(raw) {
   }
 
   const normalizedWorkouts = normalizeWorkouts(safe.workouts, globalBetweenRest);
+  const currentMondayIso = getMondayIsoForDate(new Date());
+
+  // Reset automatico dell'assegnazione settimanale dei pasti ogni nuovo lunedì
+  let resolvedWeeklyPlan =
+    safe.weeklyPlan && typeof safe.weeklyPlan === 'object' ? safe.weeklyPlan : INITIAL_WEEKLY_PLAN;
+  if (safe.weekStartIso && safe.weekStartIso < currentMondayIso) {
+    resolvedWeeklyPlan = JSON.parse(JSON.stringify(EMPTY_WEEKLY_PLAN));
+  }
 
   return {
     foods: Array.isArray(safe.foods) ? safe.foods : INITIAL_FOODS,
     meals: Array.isArray(safe.meals) ? safe.meals : INITIAL_MEALS,
-    weeklyPlan: safe.weeklyPlan && typeof safe.weeklyPlan === 'object' ? safe.weeklyPlan : INITIAL_WEEKLY_PLAN,
+    weekStartIso: currentMondayIso,
+    weeklyPlan: resolvedWeeklyPlan,
     weights: Array.isArray(safe.weights) ? safe.weights : INITIAL_WEIGHTS,
     waterLogs: Array.isArray(safe.waterLogs) ? safe.waterLogs : [],
     waterSettings: {
@@ -515,7 +531,6 @@ function playTimerBeep(soundType = 'chime') {
     const now = ctx.currentTime;
 
     if (soundType === 'boxing') {
-      // Doppio rintocco stile gong / campana da palestra
       [0, 0.34].forEach((offset) => {
         [330, 660, 990].forEach((freq, idx) => {
           const osc = ctx.createOscillator();
@@ -532,7 +547,6 @@ function playTimerBeep(soundType = 'chime') {
         });
       });
     } else if (soundType === 'digital') {
-      // Classico cronometro sportivo (3 beep corti + 1 lungo)
       const pattern = [
         { start: 0, dur: 0.11, freq: 1000 },
         { start: 0.16, dur: 0.11, freq: 1000 },
@@ -552,7 +566,6 @@ function playTimerBeep(soundType = 'chime') {
         osc.stop(now + step.start + step.dur + 0.02);
       });
     } else if (soundType === 'alert') {
-      // Sveglia rapida a doppio impulso ascendente
       [0, 0.26].forEach((groupOffset) => {
         [987.77, 1318.51].forEach((freq, i) => {
           const osc = ctx.createOscillator();
@@ -568,7 +581,6 @@ function playTimerBeep(soundType = 'chime') {
         });
       });
     } else if (soundType === 'zen') {
-      // Campana singola morbida e prolungata
       [528, 1056].forEach((freq, idx) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -582,7 +594,6 @@ function playTimerBeep(soundType = 'chime') {
         osc.stop(now + 1.16);
       });
     } else {
-      // Default: Chime Armonico (triade maggiore ascendente)
       const notes = [880, 1108.73, 1318.51];
       notes.forEach((freq, idx) => {
         const osc = ctx.createOscillator();
@@ -705,8 +716,16 @@ export default function App() {
 
       if (row && row.data) {
         const normalized = normalizeData(row.data);
-        isRemoteUpdate.current = true;
-        setData(normalized);
+        const weekWasRolledOver =
+          Boolean(row.data.weekStartIso) && row.data.weekStartIso < normalized.weekStartIso;
+
+        if (weekWasRolledOver) {
+          // Se è scattato un nuovo lunedì, aggiorna anche il cloud con la settimana resettata
+          setData(normalized);
+        } else {
+          isRemoteUpdate.current = true;
+          setData(normalized);
+        }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
         setLastSyncedAt(new Date(row.updated_at || Date.now()));
       } else {
@@ -782,6 +801,7 @@ export default function App() {
   const syncRolloverDate = useCallback(() => {
     const now = new Date();
     const currentIso = getLocalIsoDate(now);
+    const currentMondayIso = getMondayIsoForDate(now);
     const prevIso = todayIsoRef.current;
 
     if (currentIso !== prevIso) {
@@ -795,6 +815,24 @@ export default function App() {
       setSelectedWaterDate((curr) => (curr === prevIso ? currentIso : curr));
       setNewWeightDate((curr) => (curr === prevIso ? currentIso : curr));
     }
+
+    // Se è iniziato un nuovo lunedì rispetto alla settimana salvata, resetta tutti i pasti della settimana
+    setData((prev) => {
+      if (prev.weekStartIso && prev.weekStartIso < currentMondayIso) {
+        return {
+          ...prev,
+          weekStartIso: currentMondayIso,
+          weeklyPlan: JSON.parse(JSON.stringify(EMPTY_WEEKLY_PLAN)),
+        };
+      }
+      if (!prev.weekStartIso) {
+        return {
+          ...prev,
+          weekStartIso: currentMondayIso,
+        };
+      }
+      return prev;
+    });
   }, []);
 
   useEffect(() => {
@@ -833,7 +871,6 @@ export default function App() {
   const [selectedDrinkType, setSelectedDrinkType] = useState('water');
   const [editingWaterConfig, setEditingWaterConfig] = useState(false);
 
-  // Stato workout persistito in data.liveWorkoutState (sincronizzato su localStorage + Supabase)
   const liveState = data.liveWorkoutState || INITIAL_LIVE_WORKOUT_STATE;
   const activeWorkoutId = liveState.activeWorkoutId;
   const completedSets = liveState.completedSets || {};
@@ -848,7 +885,6 @@ export default function App() {
   const [tempWorkoutTitle, setTempWorkoutTitle] = useState('');
   const [tempWorkoutFocus, setTempWorkoutFocus] = useState('');
 
-  // Tick visivo ogni 250ms calcolato rispetto al timestamp assoluto endAt
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [timerFinishedAlert, setTimerFinishedAlert] = useState(false);
   const lastCompletedTimerEndAtRef = useRef(null);
@@ -915,7 +951,6 @@ export default function App() {
     [updateLiveWorkoutState]
   );
 
-  // Intervallo leggero che aggiorna nowTick finché un timer è attivo
   useEffect(() => {
     if (!persistedTimer.running) return;
     const interval = setInterval(() => {
@@ -924,7 +959,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, [persistedTimer.running, persistedTimer.endAt]);
 
-  // Rilevamento naturale (o al ricaricamento/cambio dispositivo) di timer scaduto
   useEffect(() => {
     if (!persistedTimer.running || typeof persistedTimer.endAt !== 'number') return;
     const remaining = Math.ceil((persistedTimer.endAt - nowTick) / 1000);
@@ -2039,6 +2073,7 @@ export default function App() {
       normalizeData({
         foods: INITIAL_FOODS,
         meals: INITIAL_MEALS,
+        weekStartIso: getMondayIsoForDate(new Date()),
         weeklyPlan: INITIAL_WEEKLY_PLAN,
         weights: INITIAL_WEIGHTS,
         waterLogs: [],
@@ -4008,7 +4043,6 @@ export default function App() {
     ),
   };
 
-  // --- BLOCCHI PER ALLENAMENTO ---
   const workoutSections = {
     workoutHeader: renderReorderWrapper(
       'workout',
@@ -5426,7 +5460,7 @@ export default function App() {
                                 </option>
                               </select>
 
-                              <div className={`grid grid-cols-2 p-1 rounded-xl border ${isLight ? 'bg-slate-100 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
+                              <div className={`grid grid-cols-2 rounded-xl p-1 border ${isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-950 border-slate-700'}`}>
                                 <button
                                   type="button"
                                   onClick={() => setPantryView('composer')}
@@ -5454,15 +5488,15 @@ export default function App() {
                           </div>
 
                           <div className="relative">
-                            <Search className={`w-4 h-4 ${cTextSecondary} absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none`} />
+                            <Search className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${cTextSecondary}`} />
                             <input
                               type="text"
                               value={pantrySearchQuery}
                               onChange={(e) => setPantrySearchQuery(e.target.value)}
                               placeholder={
                                 pantryView === 'composer'
-                                  ? 'Cerca un pasto per nome o per ingrediente (es. Pollo, Yogurt)...'
-                                  : 'Cerca un alimento nel database (es. Pasta, Uova, Mandorle)...'
+                                  ? 'Cerca un pasto salvato o un ingrediente (es. Pollo, Colazione, Riso)...'
+                                  : 'Cerca un alimento nel database (es. Yogurt, Uova, Avena)...'
                               }
                               className={`w-full ${cInput} border rounded-xl pl-10 pr-9 py-2.5 sm:py-2 focus:outline-none focus:border-emerald-400`}
                             />
@@ -5471,21 +5505,19 @@ export default function App() {
                                 type="button"
                                 onClick={() => setPantrySearchQuery('')}
                                 title="Cancella ricerca"
-                                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md ${cTextSecondary} hover:text-rose-400`}
+                                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg ${cTextSecondary} hover:text-rose-400`}
                               >
-                                <X className="w-3.5 h-3.5" />
+                                <X className="w-4 h-4" />
                               </button>
                             )}
                           </div>
                         </div>
 
-                        {pantryView === 'composer' && (
+                        {pantryView === 'composer' ? (
                           <div className="space-y-4 sm:space-y-5">
                             {data.layout.composer.map((cId) => composerSections[cId] || null)}
                           </div>
-                        )}
-
-                        {pantryView === 'foods' && (
+                        ) : (
                           <div className="space-y-4 sm:space-y-5">
                             {data.layout.foods.map((fId) => foodsSections[fId] || null)}
                           </div>
@@ -5495,7 +5527,7 @@ export default function App() {
 
                     {nutritionSubTab === 'water' && (
                       <div className="space-y-4 sm:space-y-5">
-                        {data.layout.water.map((watId) => waterSections[watId] || null)}
+                        {data.layout.water.map((wId) => waterSections[wId] || null)}
                       </div>
                     )}
 
@@ -5520,80 +5552,80 @@ export default function App() {
         )}
       </main>
 
-      {/* FLOATING REST & EXECUTION TIMER BAR FULL-WIDTH */}
-      {activeTab === 'workout' && (
+      {/* FLOATING REST & WORK TIMER BAR */}
+      <div className="fixed bottom-0 inset-x-0 z-40 pointer-events-none px-2.5 sm:px-6 lg:px-8 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div
-          className={`fixed bottom-0 inset-x-0 z-40 backdrop-blur-xl border-t px-3 sm:px-6 lg:px-8 pt-2.5 pb-[calc(0.65rem+env(safe-area-inset-bottom))] shadow-2xl transition-colors ${
+          className={`w-full pointer-events-auto rounded-2xl border p-2.5 sm:p-3.5 shadow-2xl transition-colors ${
             timerFinishedAlert
               ? isLight
-                ? 'bg-emerald-50/95 border-emerald-400'
-                : 'bg-emerald-950/95 border-emerald-400/70'
+                ? 'bg-emerald-50/98 border-emerald-500 ring-2 ring-emerald-400/50'
+                : 'bg-emerald-950/95 border-emerald-400 ring-2 ring-emerald-400/50'
               : timerType === 'work'
               ? isLight
-                ? 'bg-emerald-50/95 border-emerald-300'
-                : 'bg-slate-900/95 border-emerald-500/45'
+                ? 'bg-emerald-50/95 border-emerald-400 backdrop-blur-md'
+                : 'bg-slate-900/95 border-emerald-400/60 backdrop-blur-md'
               : timerType === 'exercise'
               ? isLight
-                ? 'bg-amber-50/95 border-amber-300'
-                : 'bg-slate-900/95 border-amber-500/45'
+                ? 'bg-amber-50/95 border-amber-400 backdrop-blur-md'
+                : 'bg-slate-900/95 border-amber-400/60 backdrop-blur-md'
               : isLight
-              ? 'bg-white/95 border-slate-200'
-              : 'bg-slate-900/95 border-slate-700'
+              ? 'bg-white/95 border-slate-300 backdrop-blur-md'
+              : 'bg-slate-900/95 border-slate-700 backdrop-blur-md'
           }`}
         >
-          <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4">
-            <div className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
+            <div className="flex items-center justify-between sm:justify-start gap-2.5 sm:gap-3">
               <div className="flex items-center gap-2.5">
                 <div
                   className={`p-2 rounded-xl border ${
-                    timerFinishedAlert
-                      ? 'bg-emerald-500 border-emerald-300 text-white animate-bounce'
-                      : timerType === 'work'
-                      ? 'bg-emerald-500/20 border-emerald-400/40'
+                    timerType === 'work'
+                      ? `bg-emerald-500/20 border-emerald-400/50 ${cEmerald}`
                       : timerType === 'exercise'
-                      ? 'bg-amber-500/20 border-amber-400/40'
-                      : 'bg-indigo-500/20 border-indigo-400/40'
+                      ? `bg-amber-500/20 border-amber-400/50 ${cAmber}`
+                      : `bg-indigo-500/20 border-indigo-400/40 ${cIndigo}`
                   }`}
                 >
                   {timerType === 'work' ? (
-                    <Timer className={`w-5 h-5 ${timerFinishedAlert ? 'text-white' : cEmerald}`} />
+                    <Timer className="w-4 h-4 sm:w-5 sm:h-5" />
                   ) : timerType === 'exercise' ? (
-                    <SkipForward className={`w-5 h-5 ${timerFinishedAlert ? 'text-white' : cAmber}`} />
+                    <SkipForward className="w-4 h-4 sm:w-5 sm:h-5" />
                   ) : (
-                    <Clock className={`w-5 h-5 ${timerFinishedAlert ? 'text-white' : cIndigo}`} />
+                    <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
                   )}
                 </div>
                 <div>
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                        timerFinishedAlert
-                          ? 'bg-emerald-500 text-white'
-                          : timerType === 'work'
-                          ? `bg-emerald-500/20 ${cEmerald}`
-                          : timerType === 'exercise'
-                          ? `bg-amber-500/20 ${cAmber}`
-                          : `bg-indigo-500/20 ${cIndigo}`
-                      }`}
-                    >
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className={`text-[10px] uppercase tracking-wider font-semibold ${cTextSecondary}`}>
                       {timerFinishedAlert
                         ? 'Tempo Scaduto!'
                         : timerType === 'work'
-                        ? 'Esecuzione'
+                        ? 'Esecuzione Serie'
                         : timerType === 'exercise'
-                        ? 'Cambio Es.'
+                        ? 'Cambio Esercizio'
                         : 'Recupero Serie'}
                     </span>
-                    {timerLabel && !timerFinishedAlert && (
-                      <span className={`text-[10px] font-semibold ${cTextSecondary}`}>• {timerLabel}</span>
+                    {timerLabel && (
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          timerType === 'work'
+                            ? `bg-emerald-500/25 ${cEmerald}`
+                            : timerType === 'exercise'
+                            ? `bg-amber-500/25 ${cAmber}`
+                            : `bg-indigo-500/25 ${cIndigo}`
+                        }`}
+                      >
+                        {timerLabel}
+                      </span>
                     )}
                   </div>
                   <div
-                    className={`text-2xl font-mono font-bold tracking-tight leading-none mt-1 ${
+                    className={`text-xl sm:text-2xl font-mono font-extrabold leading-none mt-0.5 ${
                       timerFinishedAlert
                         ? cEmerald
-                        : timerSeconds <= 10 && timerRunning
-                        ? cRose
+                        : timerType === 'work'
+                        ? cEmerald
+                        : timerType === 'exercise'
+                        ? cAmber
                         : cTextPrimary
                     }`}
                   >
@@ -5605,75 +5637,73 @@ export default function App() {
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => adjustTimer(-15)}
-                  className={`px-2.5 py-1.5 text-xs rounded-lg ${cInner} border ${cTextPrimary} font-semibold`}
+                  className={`px-2 py-1.5 rounded-lg ${cInner} border text-xs ${cTextPrimary} font-semibold`}
                 >
                   -15s
                 </button>
                 <button
                   onClick={() => adjustTimer(+15)}
-                  className={`px-2.5 py-1.5 text-xs rounded-lg ${cInner} border ${cTextPrimary} font-semibold`}
+                  className={`px-2 py-1.5 rounded-lg ${cInner} border text-xs ${cTextPrimary} font-semibold`}
                 >
                   +15s
                 </button>
               </div>
             </div>
 
-            <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-2">
-              <div className="flex items-center gap-1.5 flex-1 sm:flex-none">
+            <div className="hidden lg:flex items-center gap-1.5">
+              {[60, 90, 120, 180].map((sec) => (
                 <button
-                  onClick={togglePlayPauseTimer}
-                  className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 rounded-xl text-xs font-bold transition ${
-                    timerRunning
-                      ? 'bg-amber-500 text-slate-950'
-                      : timerType === 'work'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-indigo-600 text-white'
+                  key={sec}
+                  onClick={() =>
+                    startTimer(
+                      sec,
+                      sec >= 150 ? 'exercise' : 'set',
+                      sec >= 150 ? 'Cambio Es.' : 'Tra Serie'
+                    )
+                  }
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                    timerInitial === sec
+                      ? sec >= 150
+                        ? `bg-amber-500/20 border-amber-400/50 ${cAmber}`
+                        : `bg-indigo-500/20 border-indigo-400/50 ${cIndigo}`
+                      : `${cInner} ${cTextSecondary}`
                   }`}
                 >
-                  {timerRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                  {timerRunning ? 'Pausa' : 'Avvia'}
+                  {sec}s
                 </button>
+              ))}
+            </div>
 
-                <button
-                  onClick={resetCurrentTimer}
-                  className={`p-2.5 sm:p-2 rounded-xl ${cInner} border ${cTextPrimary}`}
-                >
-                  <RotateCcw className="w-4 h-4" />
-                </button>
-              </div>
-
+            <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2">
               <div className="flex items-center gap-1.5">
-                <label className={`flex items-center gap-1.5 text-xs ${cTextSecondary} cursor-pointer select-none px-2`}>
-                  <input
-                    type="checkbox"
-                    checked={autoStartTimer}
-                    onChange={(e) => setAutoStartTimer(e.target.checked)}
-                    className="rounded accent-indigo-500"
-                  />
-                  <span>Auto</span>
-                </label>
+                <button
+                  onClick={() => setAutoStartTimer(!autoStartTimer)}
+                  title="Avvio automatico timer al completamento della serie"
+                  className={`px-2.5 py-2 rounded-xl text-[11px] font-semibold border transition ${
+                    autoStartTimer
+                      ? `bg-emerald-500/20 border-emerald-400/50 ${cEmerald}`
+                      : `${cInner} ${cTextSecondary}`
+                  }`}
+                >
+                  Auto: {autoStartTimer ? 'ON' : 'OFF'}
+                </button>
 
                 <div className={`flex items-center rounded-xl border overflow-hidden ${cInner}`}>
                   <button
-                    type="button"
                     onClick={() => setSoundEnabled(!soundEnabled)}
-                    title={soundEnabled ? 'Disattiva suono fine timer' : 'Attiva suono fine timer'}
-                    className={`p-2.5 sm:p-2 transition ${
-                      soundEnabled
-                        ? `bg-indigo-500/20 ${cIndigo}`
-                        : `${cTextSecondary} opacity-60`
-                    }`}
+                    title={soundEnabled ? 'Disattiva suono timer' : 'Attiva suono timer'}
+                    className={`p-2 transition ${soundEnabled ? cEmerald : cTextSecondary}`}
                   >
                     {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
                   </button>
-
                   <select
                     value={soundType}
                     onChange={(e) => handleSelectSoundType(e.target.value)}
-                    disabled={!soundEnabled}
                     aria-label="Scegli suono fine timer"
-                    title="Scegli il suono di fine timer (riproduce un'anteprima)"
-                    className={`bg-transparent px-2 py-2 sm:py-1.5 text-xs font-semibold focus:outline-none cursor-pointer disabled:opacity-40 ${cTextPrimary}`}
+                    title="Scegli suoneria di fine tempo (con anteprima audio)"
+                    className={`bg-transparent pr-2 py-1.5 text-[11px] font-semibold focus:outline-none cursor-pointer ${
+                      soundEnabled ? cTextPrimary : cTextSecondary
+                    }`}
                   >
                     {TIMER_SOUNDS.map((s) => (
                       <option key={s.id} value={s.id} className={cOption}>
@@ -5683,10 +5713,34 @@ export default function App() {
                   </select>
                 </div>
               </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={togglePlayPauseTimer}
+                  className={`px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition ${
+                    timerRunning
+                      ? 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                      : timerType === 'work'
+                      ? 'bg-emerald-500 hover:bg-emerald-400 text-white'
+                      : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                  }`}
+                >
+                  {timerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                  <span>{timerRunning ? 'Pausa' : 'Avvia'}</span>
+                </button>
+
+                <button
+                  onClick={resetCurrentTimer}
+                  title="Azzera timer corrente"
+                  className={`p-2 rounded-xl ${cInner} border ${cTextPrimary}`}
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
